@@ -4,7 +4,7 @@
 .firebaserc
 
 # Firebase Hosting
-/firebase.json
+## /firebase.json
 *.cache
 hosting/.cache
 
