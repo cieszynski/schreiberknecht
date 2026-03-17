@@ -1,11 +1,30 @@
 <!DOCTYPE html>
 <html lang="de">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>schreiberknecht.web.app</title>
-  </head>
-  <body>
-    <p>schreiberknecht.web.app</p>
-  </body>
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>schreiberknecht.web.app</title>
+
+  <script>
+    const registerServiceWorker = async () => {
+
+      try {
+        
+        const registration = await navigator.serviceWorker
+          .register("sw.js", { type: 'module' });
+
+      } catch (ex) {
+        console.error(ex);
+      }
+    }
+
+    registerServiceWorker();
+  </script>
+</head>
+
+<body>
+  <p>schreiberknecht.web.app</p>
+</body>
+
 </html>
