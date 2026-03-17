@@ -21,7 +21,67 @@
     <main>
         <p>hier passierts</p>
     </main>
+
+    <script>
+        console.debug = (str) => {
+            document
+                .querySelector('main')
+                .insertAdjacentHTML("beforeend", `<p>${str}</p>`);
+        }
+
+        console.info = (str) => {
+            document
+                .querySelector('main')
+                .insertAdjacentHTML("beforeend", `<p style="background: #0000ff11">${str}</p>`);
+        }
+
+        console.error = (str) => {
+            document
+                .querySelector('main')
+                .insertAdjacentHTML("beforeend", `<p style="background: #ff000011">${str}</p>`);
+        }
+
+
+    </script>
     <script type="module">
+        import { JSxdb } from '../jsxdb.js';
+
+        const runTest = async () => {
+
+            const db = await JSxdb.init("test.db", {
+                1: {
+                    user: "@id, firstname, lastname",
+                },
+            });
+            try {
+                const [store1] = await db.write("user");
+
+                for await (
+                    const item of [
+                        { firstname: "a", lastname: "A" },
+                        { firstname: "b", lastname: "B" },
+                        { firstname: "c", lastname: "C" },
+                    ]
+                ) {
+                    store1.add(item);
+                }
+
+
+                const result = await store1
+                    .where('firstname', JSxdb.eq('a'))
+                    .or('lastname', JSxdb.ge('B'))
+                    .limit(2)
+                    .query();
+
+                console.table(result);
+                store1.clear();
+            } catch (ex) { console.error(ex) }
+            db.close();
+        }
+
+        runTest();
+    </script>
+    <script type="module1">
         import { JSxdb } from '../jsxdb.js';
 
         Object.prototype.fromDotNotation = (path, value) => {
