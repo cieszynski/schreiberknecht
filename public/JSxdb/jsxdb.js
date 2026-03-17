@@ -182,10 +182,10 @@ class Store {
 
     // called by add, clear, cout, delete,
     // get, getAll, getAllKeys, getKey, put
-    #execute = (verb, ...args) => new Promise((resolve, reject) => {
-        this.#store.transaction.onerror = (event) => reject(event.target.error);
-        this.#store[verb](...args).onsuccess = (event) => resolve(event.target.result);
-    });
+    #execute = (verb, ...args) => /* new Promise((resolve, reject) =>  */ {
+        this.#store.transaction.onerror = (event) => Promise.reject(event.target.error);
+        this.#store[verb](...args).onsuccess = (event) => Promise.resolve(event.target.result);
+    }/* ) */;
 
     abort = () => this.#store.transaction.abort();
 
@@ -259,7 +259,7 @@ class Store {
             },
             or: {
                 writable: true,
-                value: function () {
+                value: function (indexName, keyRange) {
                     args.push(indexName, keyRange);
                     // at now, only 'or' is allowed
                     this.and = undefined;
@@ -268,7 +268,7 @@ class Store {
             },
             and: {
                 writable: true,
-                value: function () {
+                value: function (indexName, keyRange) {
                     args.push(indexName, keyRange);
                     // at now, only 'and' is allowed
                     this.or = undefined;
@@ -306,7 +306,7 @@ class Store {
                         return;
                     }
                 }
-                
+
                 if ((startsWith && value.indexOf(permutations[n]) === 0)
                     || value === permutations[n]) {
 
@@ -337,14 +337,13 @@ class Database {
 
     get version() { return this.#db.version; }
 
-    #readwrite = (ro = false, ...storeNames) => new Promise(async (resolve) => {
-
+    #readwrite = (ro = false, ...storeNames) => {
         const request = this.#db.transaction(storeNames, ro ? 'readonly' : 'readwrite');
-
-        resolve(storeNames.map(storeName => {
+        
+        return Promise.resolve(storeNames.map((storeName) => {
             return new Store(request.objectStore(storeName));
         }));
-    });
+    };
 
     read = (...storeNames) => this.#readwrite(true, ...storeNames);
 
@@ -399,7 +398,7 @@ const onupgradeneeded = (db, oldVersion, newVersion, scheme) => {
                         unique: /^\!/.test(indexName)
                     });
 
-                console.debug("index '%s' created", indexName);
+                console.debug(`'${storeName}': index '${indexName}' created`);
             });
         });
     }
