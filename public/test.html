@@ -11,7 +11,6 @@
         }
 
         main {
-            white-space: pre-line;
             outline: 1px solid gray;
             padding: 1em;
         }
@@ -21,29 +20,19 @@
         }
 
         span {
-            outline: 1px solid blue;
-        }
-
-        span.sp {
-            outline: 1px solid red;
-            display: inline-block;
-            width: 1em;
-            height: 1em;
+            white-space: pre;
         }
     </style>
 </head>
 
 <body>
     <h1>SchreiberKnecht</h1>
-    <main contenteditable="true"><span>test</span><span class="sp"></span><span>toast</span></main>
+    <main contenteditable="true">
+        <p><br></p>
+    </main>
 
     <script>
         const main = document.querySelector('main');
-
-
-        main.addEventListener('input', event => {
-            console.log(event.inputType)
-        });
 
         main.addEventListener('beforeinput', event => {
 
@@ -52,12 +41,66 @@
             console.log(range)
 
             switch (event.inputType) {
+                case 'deleteContentBackward':
+                    event.preventDefault();
+
+                    if (range.startContainer === range.endContainer) {
+
+                        const text = range.startContainer;
+                        const startSpan = text.parentElement;
+
+                        // remove only the previous char or
+                        // let the previous char, remove inside range
+                        if ((range.endOffset - range.startOffset) >= 1) {
+
+                            const pre = text.data.slice(0, range.startOffset);
+                            const post = text.data.slice(range.endOffset);
+                            text.data = `${pre}${post}`;
+
+                            if (text.data) {
+                                document.getSelection()
+                                    .collapse(text, range.startOffset);
+                            } else {
+                                const br = document.createElement('br');
+                                startSpan.replaceWith(br);
+                                document.getSelection()
+                                    .collapse(br.parentNode);
+                            }
+                        }
+                    } else {
+                        if (range.startContainer.nodeType === 3 && range.endContainer.nodeType === 1) {
+                            console.log(5, 'Firefox')
+                            return
+                        }
+                        console.log(5, range.startContainer, range.endContainer)
+
+                        const startSpan = range.startContainer.parentNode;
+                        const endSpan = range.endContainer.parentNode;
+                        const startText = range.startContainer;
+                        const endText = range.endContainer;
+
+                        if (startSpan.parentElement === endSpan.parentElement) {
+                            let next = startSpan.nextElementSibling;
+
+                            while (next && next !== endSpan) {
+                                console.log(11)
+                                const current = next;
+                                next = next.nextElementSibling;
+                                current.remove();
+                            }
+                        } else {
+                            console.log(55)
+                        }
+                    }
+                    break;
+
                 case 'insertText':
                     event.preventDefault();
 
                     if (!event.target.children.length) {
                         const p = event.target.appendChild(document.createElement('p'));
                         const span = p.appendChild(document.createElement('span'));
+                        span.className = event.data === ' ' ? 'sp' : 'w'
                         const text = span.appendChild(document.createTextNode(event.data));
                         document.getSelection()
                             .collapse(text, event.data.length);
@@ -65,25 +108,80 @@
                     }
 
                     if (range.startContainer === range.endContainer) {
-                        const text = range.startContainer;
-                        const pre = text.data.slice(0, range.startOffset);
-                        const post = text.data.slice(range.endOffset);
+                        let startSpan = range.startContainer.parentNode;
+                        let text = range.startContainer;
 
-                        text.data = `${pre}${event.data}${post}`;
+                        if (range.startContainer.nodeName === 'P') {
+                            // console.log(range.startContainer.childNodes)
+                            range.startContainer.childNodes.forEach(element => {
+                                element.remove();
+                            });
 
-                        document.getSelection()
-                            .collapse(text, range.startOffset + event.data.length);
+                            startSpan = range.startContainer.appendChild(document.createElement('span'));
+                            text = startSpan.appendChild(document.createTextNode(''));
+                            startSpan.className = (event.data === ' ') ? 'sp' : 'w';
+                        }
+                        console.log(startSpan)
+                        const pre = text?.data?.slice(0, range.startOffset) || '';
+                        const post = text?.data?.slice(range.endOffset) || '';
+
+                        if (event.data === ' ') {
+
+                            if (range.collapsed) {
+                                const spSpan = document.createElement('span');
+                                spSpan.className = 'sp';
+                                spSpan.innerText = ' ';
+
+                                startSpan.innerText = pre;
+
+                                startSpan.after(spSpan);
+
+                                if (post) {
+                                    const endSpan = document.createElement('span');
+                                    endSpan.className = 'w';
+                                    endSpan.innerText = post;
+                                    spSpan.after(endSpan);
+                                }
+
+                                document
+                                    .getSelection()
+                                    .collapse(spSpan.firstChild, 1);
+                            } else {
+                                console.log('not collapsed')
+                            }
+
+                        } else {
+                            console.log(22, pre, startSpan.className)
+                            if (pre === ' ') {
+                                const span = document.createElement('span');
+                                span.className = 'w';
+                                const text = span.appendChild(document.createTextNode(event.data));
+
+                                startSpan.after(span);
+                                document
+                                    .getSelection()
+                                    .collapse(text, 1);
+                            } else {
+                                text.data = `${pre}${event.data}${post}`;
+                                document.getSelection()
+                                    .collapse(text, range.startOffset + event.data.length);
+                            }
+
+                        }
 
                     } else {
                         const startSpan = range.startContainer.parentNode;
                         const endSpan = range.endContainer.parentNode;
 
                         if (startSpan.parentElement === endSpan.parentElement) {
-                            const siblings = Array
-                                .from(startSpan.parentElement.children)
-                                .filter(sibling => (sibling !== startSpan && sibling !== endSpan));
 
-                            siblings.forEach(sibling => sibling.remove());
+                            let next = startSpan.nextElementSibling;
+
+                            while (next) {
+                                const current = next;
+                                next = next.nextElementSibling;
+                                current.remove();
+                            }
 
                             if (event.data === ' ') {
                                 const startText = range.startContainer;
@@ -94,7 +192,7 @@
 
                                 const span = document.createElement('span');
                                 span.className = 'sp';
-                                span.data = ' ';
+                                span.innerText = ' ';
 
                                 startSpan.after(span);
                             } else {
@@ -104,7 +202,7 @@
                                 const pre = startText.data.slice(0, range.startOffset);
                                 const post = endText.data.slice(range.endOffset);
 
-                                startText.data = `${pre}${event.data}${post}`;
+                                startText.innerText = `${pre}${event.data}${post}`;
 
                                 endSpan.remove();
                             }
@@ -117,78 +215,6 @@
                 default:
                     console.log(event.inputType)
             }
-        });
-
-        main.addEventListener('beforeinput2', event => {
-            console.log(event.inputType, event.getTargetRanges())
-
-            const [range] = event.getTargetRanges();
-
-            switch (event.inputType) {
-                case 'insertText':
-                    event.preventDefault();
-
-                    if (!event.target.childNodes.length) {
-                        event.target.insertAdjacentHTML('beforeend', '<p><span/></p>');
-                        const span = event.target.lastChild.lastChild;
-                        span.textContent = event.data;
-                        document.getSelection()
-                            .collapse(span, 1);
-                        return;
-                    }
-
-                    const parent = range.startContainer?.firstChild?.parentNode
-                        || range.startContainer?.parentNode;
-
-                    console.log(parent)
-
-                    switch (event.data) {
-                        case ' ':
-                            // const parent = range.startContainer?.firstChild?.parentNode
-                            //     || range.startContainer?.parentNode;
-
-                            const s = document.createElement('span');
-                            s.textContent = '';
-
-                            // parent.insertAdjacentHTML('afterend', '<span> </span>');
-                            parent.insertAdjacentElement('afterend', s)
-                            // const span = document.createElement('span');
-                            // span.textContent = ' ';//event.data
-                            // parent.after(span);
-                            document.getSelection()
-                                .collapse(s.firstChild, 0/* parent.nextSibling,1 */);
-                            break;
-                        default:
-                            const text = range.startContainer?.firstChild
-                                || range.startContainer;
-                            text.textContent += event.data;
-                            document.getSelection()
-                                .collapse(text, text.textContent.length);
-                    }
-
-                    //console.log(range)
-                    // if (range.collapsed) {
-                    //     if (range.startContainer === main) {
-                    //         const range2 = new Range();
-                    //         const span = document.createElement('span');
-                    //         range.startContainer.appendChild(span);
-                    //         span.textContent = event.data;
-                    //         //range2.setStart(span.firstChild, 1)
-                    //         //range2.setEnd(span.firstChild, 1);
-
-                    //         console.log(range2)
-                    //         // document.getSelection().removeAllRanges();
-                    //         document.getSelection().collapse(span.firstChild, 1);//addRange(range2);
-                    //     } else {
-                    //         console.log('yo')
-                    //     }
-                    // }
-                    break;
-            }
-        });
-
-        main.addEventListener('input', event => {
-
         });
     </script>
 </body>
