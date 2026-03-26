@@ -44,7 +44,9 @@
                 case 'deleteContentBackward':
                     event.preventDefault();
 
+                    // inside one word
                     if (range.startContainer === range.endContainer) {
+                        console.log('inside word', 1)
 
                         const text = range.startContainer;
                         const startSpan = text.parentElement;
@@ -52,22 +54,41 @@
                         // remove only the previous char or
                         // let the previous char, remove inside range
                         if ((range.endOffset - range.startOffset) >= 1) {
+                            console.log('inside word', 2)
 
                             const pre = text.data.slice(0, range.startOffset);
                             const post = text.data.slice(range.endOffset);
                             text.data = `${pre}${post}`;
 
                             if (text.data) {
-                                document.getSelection()
+                                console.log('inside word', 21)
+                                document
+                                    .getSelection()
                                     .collapse(text, range.startOffset);
                             } else {
-                                const br = document.createElement('br');
-                                startSpan.replaceWith(br);
-                                document.getSelection()
-                                    .collapse(br.parentNode);
+                                if (startSpan.previousElementSibling) {
+                                    console.log('inside word', 22)
+                                    document
+                                        .getSelection()
+                                        .collapse(
+                                            startSpan.previousElementSibling.firstChild,
+                                            startSpan.previousElementSibling.firstChild.data.length);
+                                    startSpan.remove()
+                                } else {
+                                    console.log('inside word', 23)
+                                    const br = document.createElement('br');
+                                    startSpan.replaceWith(br);
+                                    document
+                                        .getSelection()
+                                        .collapse(br.parentNode);
+                                }
                             }
+                        } else {
+                            console.log('inside word', 3)
                         }
-                    } else {
+                    }
+                    // between two or more words
+                    else {
                         if (range.startContainer.nodeType === 3 && range.endContainer.nodeType === 1) {
                             console.log(5, 'Firefox')
                             return
@@ -79,17 +100,118 @@
                         const startText = range.startContainer;
                         const endText = range.endContainer;
 
+                        // inside h1-6, p, ...
                         if (startSpan.parentElement === endSpan.parentElement) {
                             let next = startSpan.nextElementSibling;
 
                             while (next && next !== endSpan) {
-                                console.log(11)
                                 const current = next;
                                 next = next.nextElementSibling;
                                 current.remove();
                             }
-                        } else {
-                            console.log(55)
+
+                            const pre = startText.data.slice(0, range.startOffset);
+                            const post = endText.data.slice(range.endOffset);
+
+                            switch (true) {
+                                // ab c[d ef] => ab c.
+                                // a[b cd ef] => a.
+                                // a[b cd e]f => af.
+                                // [ab cd e]f => f.
+                                // [ab c]d ef => d ef.
+                                case (!!pre || !!post):
+                                    startText.data = `${pre}${post}`;
+                                    endSpan.remove();
+                                    document.getSelection()
+                                        .collapse(startText, range.startOffset);
+                                    break;
+
+                                default:
+                                    switch (true) {
+                                        // ab cd[ ef] => ab cd.
+                                        // ab [cd ef] => ab .
+                                        // ab[ cd ef] => ab.
+                                        case (!!startSpan.previousElementSibling):
+                                            document.getSelection()
+                                                .collapse(
+                                                    startSpan.previousElementSibling.firstChild,
+                                                    startSpan.previousElementSibling.firstChild.data.length);
+                                            break;
+
+                                        // [ab cd ]ef => ef.
+                                        // [ab cd] ef =>  ef.
+                                        case (!!endSpan.nextElementSibling):
+                                            document.getSelection()
+                                                .collapse(
+                                                    endSpan.nextElementSibling.firstChild, 0);
+                                            break;
+
+                                        default:
+                                            const br = document.createElement('br');
+                                            startSpan.before(br);
+                                            document.getSelection()
+                                                .collapse(br.parentNode);
+                                    }
+                                    startSpan.remove();
+                                    endSpan.remove();
+                            }
+                        }
+                        // over several h1-6, p, ...
+                        //TODO firefox!
+                        else {
+                            console.log(55, startSpan.parentElement, endSpan.parentElement)
+                            console.log(555, startSpan, startSpan.closest('p, h1'))
+
+                            const startNode = startSpan.closest('p, h1');
+                            const endNode = endSpan.closest('p, h1');
+
+                            let next = startNode.nextElementSibling;
+
+                            while (next && next !== endNode) {
+                                const current = next;
+                                next = next.nextElementSibling;
+                                current.remove()
+                            }
+
+                            next = startSpan.nextElementSibling;
+
+                            while (next) {
+                                const current = next;
+                                next = next.nextElementSibling;
+                                current.remove()
+                            }
+
+                            let prev = endSpan.previousElementSibling;
+
+                            while (prev) {
+                                const current = prev;
+                                prev = prev.previousElementSibling;
+                                current.remove()
+                            }
+                            const pre = startText.data.slice(0, range.startOffset);
+                            const post = endText.data.slice(range.endOffset);
+
+                            startText.data = `${pre}${post}`;
+                            if(!startText.data) {
+                                startSpan.remove()
+                            }
+                            endSpan.remove();
+
+                            if (!endNode.hasChildNodes()) {
+                                endNode.remove()
+                            }
+
+                            if (!startNode.hasChildNodes()) {
+                                const br = document.createElement('br');
+                                startNode.appendChild(br);
+                                document
+                                    .getSelection()
+                                    .collapse(br.parentNode);
+                            } else {
+                                document
+                                    .getSelection()
+                                    .collapse(startText, startText.data.length);
+                            }
                         }
                     }
                     break;
