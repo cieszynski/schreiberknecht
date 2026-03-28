@@ -12,7 +12,7 @@
 
         main {
             outline: 1px solid gray;
-            padding: 1em;
+            padding: 0em;
         }
 
         p {
@@ -27,15 +27,13 @@
 
 <body>
     <h1>SchreiberKnecht</h1>
-    <main contenteditable="true">
-        <p><br></p>
-    </main>
+    <main contenteditable="true"><p><span class="w">aa</span><span class="br"><br></span><span class="w">aa</span></p><p><span class="w">bb</span></p><p><span class="w">cc</span></p></main>
 
     <script>
         const main = document.querySelector('main');
 
         main.addEventListener('beforeinput', event => {
-
+            main.normalize();
             const [range] = event.getTargetRanges();
 
             console.log(range)
@@ -76,11 +74,14 @@
                                     startSpan.remove()
                                 } else {
                                     console.log('inside word', 23)
-                                    const br = document.createElement('br');
-                                    startSpan.replaceWith(br);
+                                    const span = document.createElement('span');
+                                    span.innerText = '\xA0';
+                                    span.className = 'br';
+                                    //const br = document.createElement('br');
+                                    startSpan.replaceWith(span/* br */);
                                     document
                                         .getSelection()
-                                        .collapse(br.parentNode);
+                                        .collapse(span.firstChild, 1/* br.parentNode */);
                                 }
                             }
                         } else {
@@ -89,16 +90,22 @@
                     }
                     // between two or more words
                     else {
-                        if (range.startContainer.nodeType === 3 && range.endContainer.nodeType === 1) {
-                            console.log(5, 'Firefox')
-                            return
-                        }
-                        console.log(5, range.startContainer, range.endContainer)
+                        let startText = range.startContainer;
+                        let endText = range.endContainer;
 
-                        const startSpan = range.startContainer.parentNode;
-                        const endSpan = range.endContainer.parentNode;
-                        const startText = range.startContainer;
-                        const endText = range.endContainer;
+                        //if (range.startContainer.nodeType === 3 && range.endContainer.nodeType === 1) {
+                        if(range.endContainer===event.target) {
+                            console.log(5, 'Firefox1',range.startContainer, range.endContainer)
+                            endText = range.endContainer.lastChild.lastChild.firstChild
+                        }
+                        if(range.startContainer===event.target) {
+                            console.log(5, 'Firefox2')
+                            startText = range.startContainer.firstChild.firstChild.firstChild
+                        }
+                        console.log(5, startText, range.startContainer, range.endContainer)
+
+                        const startSpan = startText/* range.startContainer */.parentNode;
+                        const endSpan = endText/* range.endContainer */.parentNode;
 
                         // inside h1-6, p, ...
                         if (startSpan.parentElement === endSpan.parentElement) {
@@ -160,8 +167,8 @@
                         //TODO firefox!
                         else {
                             console.log(55, startSpan.parentElement, endSpan.parentElement)
-                            console.log(555, startSpan, startSpan.closest('p, h1'))
-
+                            console.log(555, startSpan, startSpan.closest('p'))
+console.log(5555, range.startContainer.parentNode)
                             const startNode = startSpan.closest('p, h1');
                             const endNode = endSpan.closest('p, h1');
 
