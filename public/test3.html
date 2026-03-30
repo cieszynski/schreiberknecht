@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <title>Test3 SchreiberKnecht</title>
+    <meta charset="utf-8">
+
+    <style>
+        main {
+            padding: 1em;
+            border: 1px solid black;
+        }
+
+        p {
+            background-color: #eee;
+        }
+
+        span {
+            white-space: pre;
+        }
+    </style>
+</head>
+
+<body>
+    <main contenteditable="true">
+        <p><span class="br"><br></span></p>
+    </main>
+    <script>
+        const main = document.querySelector('main');
+
+        const createSpan = (text) => {
+            const elem = document.createElement('span');
+            elem.innerText = text;
+
+            switch (text) {
+                case ' ':
+                    elem.className = 'sp';
+                    break;
+                default:
+                    elem.className = 'w';
+            }
+            return elem;
+        }
+
+        const onInsertText = (startNode, endNode, startText, endText, pre, post, char) => {
+            if (startNode === endNode) {
+                switch (startNode.className) {
+                    case 'br': {
+                        const span = createSpan(event.data);
+                        startNode
+                            .before(span);
+                        document
+                            .getSelection()
+                            .collapse(span.firstChild, span.innerText.length);
+                        break;
+                    }
+
+                    case 'sp':
+                        const span = createSpan(event.data);
+                        startNode.after(span);
+                        document
+                            .getSelection()
+                            .collapse(span.firstChild, 1)
+                        break;
+
+                    default:
+                        if ([' '].includes(event.data)) {
+                            const sp = createSpan(event.data);
+
+                            if (pre) {
+                                startText.data = pre;
+                                startNode.after(sp);
+                            } else {
+                                startNode.replaceWith(sp);
+                            }
+
+                            if (post) {
+                                const span = createSpan(post);
+                                sp.after(span);
+                            }
+
+                            document
+                                .getSelection()
+                                .collapse(sp.firstChild, 1)
+
+                        } else {
+                            startText.data = `${pre}${char}${post}`;
+                            document
+                                .getSelection()
+                                .collapse(startNode.firstChild, startText.data.length);
+                        }
+                }
+            } else {
+                if ([' '].includes(event.data)) {
+                    const sp = createSpan(event.data);
+
+                    if (pre) {
+                        startText.data = pre;
+                        startNode.after(sp);
+                    } else {
+                        startNode.replaceWith(sp);
+                    }
+
+                    if (post) {
+                        endText.data = post;
+                    } else {
+                        endNode.remove()
+                    }
+
+                    document
+                        .getSelection()
+                        .collapse(sp.firstChild, 1)
+
+                } else {
+                    const nodes = []
+
+                    if (['sp'].includes(startNode.className) && startNode.previousElementSibling?.className === 'w') {
+                        nodes.push(startNode.previousElementSibling);
+                    }
+
+                    if (['w'].includes(startNode.className)) {
+                        startNode.innerText = pre;
+                        nodes.push(startNode);
+                    }
+
+                    nodes.push(createSpan(event.data))
+
+                    if (['sp'].includes(endNode.className) && endNode.nextElementSibling?.className === 'w') {
+                        nodes.push(endNode.nextElementSibling);
+                    }
+
+                    if (['w'].includes(endNode.className)) {
+                        endNode.innerText = post;
+                        nodes.push(endNode);
+                    }
+
+                    const elem = nodes.reduce((prev, cur) => {
+                        cur.innerText = prev.innerText + cur.innerText;
+                        prev.remove()
+                        return cur
+                    });
+
+                    startNode.remove();
+                    endNode.replaceWith(elem);
+
+                    document
+                        .getSelection()
+                        .collapse(elem.firstChild, pre.length + 1)
+                }
+            }
+        }
+
+        main.addEventListener('beforeinput', event => {
+
+            event.preventDefault();
+
+            const [range] = event.getTargetRanges();
+            //  console.log(range)
+            const startText = range.startContainer.firstChild
+                ? document.createTextNode(range.startContainer.innerText)
+                : range.startContainer
+
+            const startNode = range.startContainer.data
+                ? range.startContainer.parentNode
+                : range.startContainer
+
+            const endText = range.endContainer.firstChild
+                ? document.createTextNode(range.endContainer.innerText)
+                : range.endContainer
+
+            const endNode = range.endContainer.data
+                ? range.endContainer.parentNode
+                : range.endContainer
+
+            const pre = startText.data.slice(0, range.startOffset);
+            const post = endText.data.slice(range.endOffset);
+
+            if (range.startContainer !== range.endContainer) {
+                // über mehre Worte/Leerzeichen
+                const startParent = startNode.closest('p, h1');
+                const endParent = endNode.closest('p, h1');
+
+                let next = startParent.nextElementSibling;
+
+                while (next && next !== endParent) {
+                    const current = next;
+                    next = next.nextElementSibling;
+                    current.remove()
+                }
+
+                next = startNode.nextElementSibling;
+
+                while (next && next !== endNode) {
+                    const current = next;
+                    next = next.nextElementSibling;
+                    current.remove()
+                }
+
+                let prev = endNode.previousElementSibling;
+
+                while (prev && prev !== startNode) {
+                    const current = prev;
+                    prev = prev.previousElementSibling;
+                    current.remove()
+                }
+            }
+
+            switch (event.inputType) {
+                case 'insertText':
+                    return onInsertText(startNode, endNode, startText, endText, pre, post, event.data);
+            }
+
+            // console.log(
+            //     'startText', startText,
+            //     'startNode', startNode,
+            //     'endText', endText,
+            //     'endNode', endNode,
+            //     'pre', pre,
+            //     'post', post)
+        });
+    </script>
+</body>
+
+</html>
