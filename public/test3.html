@@ -42,7 +42,36 @@
             return elem;
         }
 
+        const onDeleteContentBackward = (startNode, endNode, startText, endText, pre, post) => {
+            console.debug('onDeleteContentBackward', startNode === endNode);
+            
+            if (startNode === endNode) {
+                
+                switch (startNode.className) {
+                    case 'br': 
+                        return;
+                    default:
+                        startNode.innerText = pre + post;
+                }
+                if (startNode.innerText) {
+                    document
+                        .getSelection()
+                        .collapse(startNode.firstChild, pre.length);
+
+                } else {
+                    document
+                        .getSelection()
+                        .collapse(startNode.nextElementSibling);
+                    startNode.remove();
+                }
+            } else {
+                console.log(22, startNode, endNode, endNode.contains(startNode))
+            }
+        }
+
         const onInsertText = (startNode, endNode, startText, endText, pre, post, char) => {
+            console.debug('onInsertText', startNode === endNode);
+
             if (startNode === endNode) {
                 switch (startNode.className) {
                     case 'br': {
@@ -87,7 +116,7 @@
                             startText.data = `${pre}${char}${post}`;
                             document
                                 .getSelection()
-                                .collapse(startNode.firstChild, startText.data.length);
+                                .collapse(startNode.firstChild, pre.length + 1);
                         }
                 }
             } else {
@@ -112,32 +141,42 @@
                         .collapse(sp.firstChild, 1)
 
                 } else {
-                    const nodes = []
-
-                    if (['sp'].includes(startNode.className) && startNode.previousElementSibling?.className === 'w') {
-                        nodes.push(startNode.previousElementSibling);
-                    }
+                    const nodes = [];
+                    let offset = 0;
 
                     if (['w'].includes(startNode.className)) {
+                        console.log(1)
                         startNode.innerText = pre;
                         nodes.push(startNode);
+                        offset += pre.length;
+                    }
+
+                    if (['sp'].includes(startNode.className) && startNode.previousElementSibling?.className === 'w') {
+                        console.log(2)
+                        nodes.push(startNode.previousElementSibling);
+                        offset += startNode.previousElementSibling.innerText.length;
                     }
 
                     nodes.push(createSpan(event.data))
 
                     if (['sp'].includes(endNode.className) && endNode.nextElementSibling?.className === 'w') {
+                        console.log(3)
                         nodes.push(endNode.nextElementSibling);
+                        offset += 1
                     }
 
                     if (['w'].includes(endNode.className)) {
+                        console.log(4)
                         endNode.innerText = post;
                         nodes.push(endNode);
+                        offset += 1;
+
                     }
 
-                    const elem = nodes.reduce((prev, cur) => {
+                    const elem = nodes.reduce((prev, cur, idx, arr) => {
                         cur.innerText = prev.innerText + cur.innerText;
-                        prev.remove()
-                        return cur
+                        prev.remove();
+                        return cur;
                     });
 
                     startNode.remove();
@@ -145,7 +184,7 @@
 
                     document
                         .getSelection()
-                        .collapse(elem.firstChild, pre.length + 1)
+                        .collapse(elem.firstChild, offset)
                 }
             }
         }
@@ -155,32 +194,49 @@
             event.preventDefault();
 
             const [range] = event.getTargetRanges();
-            //  console.log(range)
-            const startText = range.startContainer.firstChild
-                ? document.createTextNode(range.startContainer.innerText)
-                : range.startContainer
+            console.log(range)
 
-            const startNode = range.startContainer.data
-                ? range.startContainer.parentNode
-                : range.startContainer
+            const startText = (range.startContainer === event.target /* firefox */)
+                ? range.startContainer.firstChild.firstChild.firstChild
+                : (range.startContainer.nodeType === Node.ELEMENT_NODE /* firefox */)
+                    ? document.createTextNode(range.startContainer.innerText)
+                    : range.startContainer
 
-            const endText = range.endContainer.firstChild
-                ? document.createTextNode(range.endContainer.innerText)
-                : range.endContainer
+            const startNode = (range.startContainer.nodeType === Node.TEXT_NODE)
+                ? (range.startContainer.parentElement === event.target /* firefox */)
+                    ? range.startContainer.parentElement.firstElementChild.firstElementChild
+                    : range.startContainer.parentElement
+                : range.startContainer /* firefox */
 
-            const endNode = range.endContainer.data
-                ? range.endContainer.parentNode
-                : range.endContainer
+            const endText = (range.endContainer === event.target /* firefox */)
+                ? range.endContainer.lastChild.lastChild.firstChild
+                : (range.endContainer.nodeType === Node.ELEMENT_NODE /* firefox */)
+                    ? document.createTextNode(range.endContainer.innerText)
+                    : range.endContainer
+
+            const endNode = (range.endContainer.nodeType === Node.TEXT_NODE)
+                ? range.endContainer.parentElement
+                : (range.endContainer.parentElement === event.target /* firefox */)
+                    ? range.endContainer.parentElement.lastElementChild.firstElementChild
+                    : range.endContainer /* firefox */
 
             const pre = startText.data.slice(0, range.startOffset);
             const post = endText.data.slice(range.endOffset);
 
+            console.log(
+                'startText', startText,
+                'startNode', startNode,
+                'endText', endText,
+                'endNode', endNode,
+                'pre', pre,
+                'post', post)
+
             if (range.startContainer !== range.endContainer) {
-                // über mehre Worte/Leerzeichen
+                // über mehre Worte/Leerzeichen/Absätze
                 const startParent = startNode.closest('p, h1');
                 const endParent = endNode.closest('p, h1');
 
-                let next = startParent.nextElementSibling;
+                let next = startParent?.nextElementSibling;
 
                 while (next && next !== endParent) {
                     const current = next;
@@ -188,7 +244,7 @@
                     current.remove()
                 }
 
-                next = startNode.nextElementSibling;
+                next = startNode?.nextElementSibling;
 
                 while (next && next !== endNode) {
                     const current = next;
@@ -196,7 +252,7 @@
                     current.remove()
                 }
 
-                let prev = endNode.previousElementSibling;
+                let prev = endNode?.previousElementSibling;
 
                 while (prev && prev !== startNode) {
                     const current = prev;
@@ -208,6 +264,12 @@
             switch (event.inputType) {
                 case 'insertText':
                     return onInsertText(startNode, endNode, startText, endText, pre, post, event.data);
+
+                case 'deleteContentBackward':
+                    return onDeleteContentBackward(startNode, endNode, startText, endText, pre, post);
+
+                default:
+                    console.log(event.inputType)
             }
 
             // console.log(
@@ -217,6 +279,10 @@
             //     'endNode', endNode,
             //     'pre', pre,
             //     'post', post)
+        });
+
+        main.addEventListener('input', event => {
+            event.preventDefault()
         });
     </script>
 </body>
