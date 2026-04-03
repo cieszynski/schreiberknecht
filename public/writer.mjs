@@ -121,10 +121,6 @@ class Input {
 
         event.preventDefault();
 
-
-
-        console.log(event.inputType)
-
         const [range] = event.getTargetRanges();
 
         console.log(range)
@@ -148,7 +144,10 @@ class Input {
             `);
         }
 
-        //console.log(startText, endText)
+        console.log(startText, endText)
+        if (!(startText && endText)) {
+            //return; /* firefox? */
+        }
 
         switch (true) {
             case (startText === null && endText === null):
@@ -163,12 +162,20 @@ class Input {
                     startText = endText = span.firstChild;
                     startOffset = endOffset = 0;
                 } else {
-
+                    console.info('TODO 1')
                 }
+                break;
+            case (startText === null): // endContainer = span.br
+                    //console.info('TODO 2', range.startContainer, range.startContainer === range.endContainer)
+                    startText = endText;
+                break;
+
+            case (endText === null):
+                    console.info('TODO 3')
                 break;
 
             default:
-                console.info(startText, startText, endText, endText)
+                console.info(startText, startOffset, endText, endOffset)
         }
 
         const startNode = startText.parentElement;
@@ -202,7 +209,7 @@ class Input {
 
                     let nextNode = startNode.nextElementSibling;
 
-                    while (nextNode && nextNode.className !=='br') {
+                    while (nextNode && nextNode.className !== 'br') {
                         const current = nextNode;
                         nextNode = nextNode.nextElementSibling;
                         current.remove();
@@ -218,6 +225,127 @@ class Input {
                 }
             }
         }
+
+        const pre = startText?.data?.slice(0, startOffset);
+        const post = endText?.data?.slice(endOffset);
+
+        switch (event.inputType) {
+            case 'insertText':
+                return this.onInsertText(startNode, endNode, pre, post, event.data);
+
+            case 'deleteContentBackward':
+                return this.onDeleteContent(startNode, endNode, pre, post);
+
+            default:
+                console.log(event.inputType)
+        }
+    }
+
+    onDeleteContent(startNode, endNode, pre, post) {
+        console.debug('onDeleteContent', {
+            startNode: startNode,
+            endNode: endNode,
+            equal: startNode === endNode,
+            pre: pre,
+            post: post
+        });
+
+        if (startNode === endNode) {
+            switch (startNode.className) {
+                case 'br':
+                   break// return;
+                default:
+                    startNode.innerText = pre + post;
+            }
+
+            if (startNode.innerText) {
+                console.log(1)
+                document
+                    .getSelection()
+                    .collapse(startNode.firstChild, pre.length);
+
+            } else {
+                console.log(2, startNode.nextElementSibling)
+                document
+                    .getSelection()
+                    .collapse(
+                        startNode.nextElementSibling.className==='br'
+                        ? startNode.nextElementSibling
+                        : startNode.nextElementSibling.firstChild
+                    );
+                startNode.remove();
+            }
+        } else {
+
+        }
+    }
+
+    onInsertText(startNode, endNode, pre, post, data) {
+        console.debug('onInsertText', {
+            startNode: startNode,
+            endNode: endNode,
+            equal: startNode === endNode,
+            pre: pre,
+            post: post
+        });
+
+        if (startNode === endNode) {
+            switch (startNode.className) {
+                case 'br': {
+                    const span = createSpan(data);
+                    startNode
+                        .before(span);
+                    document
+                        .getSelection()
+                        .collapse(span.firstChild, span.innerText.length);
+                    break;
+                }
+
+                case 'sp': {
+                    const span = createSpan(data);
+                    // Cursor vor oder nach dem Leerzeichen
+                    if (post.length) { // vor
+                        startNode.before(span);
+                    } else { // nach
+                        startNode.after(span);
+                    }
+                    document
+                        .getSelection()
+                        .collapse(span.firstChild, 1)
+                    break;
+                }
+
+                default:
+                    if ([' '].includes(data)) {
+                        const sp = createSpan(data);
+
+                        if (pre) {
+                            startNode.innerText = pre;
+                            startNode.after(sp);
+                        } else {
+                            startNode.replaceWith(sp);
+                        }
+
+                        if (post) {
+                            const span = createSpan(post);
+                            sp.after(span);
+                        }
+
+                        document
+                            .getSelection()
+                            .collapse(sp.firstChild, 1);
+
+                    } else {
+                        startNode.innerText = `${pre}${data}${post}`;
+                        document
+                            .getSelection()
+                            .collapse(startNode.firstChild, pre.length + data.length);
+                    }
+                    break;
+            }
+        } else {
+            console.info('TODO: startNode !== endNode')
+        }
     }
 }
 
@@ -231,10 +359,10 @@ class Writer {
 
         node.contentEditable = true;
         //node.innerHTML = '<article><p><span class="w">aaa</span><span class="br"><br></span></p><p><span class="w2">b</span><span class="br"><br></span></p></article>';
-        //node.innerHTML = '<article><p><span class="br"><br></span></p></article>'
+        node.innerHTML = '<article><p><span class="br"><br></span></p></article>'
         //node.innerHTML = '<article><p><span class="w">a</span><span class="sp"> </span><span class="w">b</span><span class="sp"> </span><span class="w">c</span><span class="br"><br></span></p></article>'
         //node.innerHTML = '<article><p><span class="w">ab<span style="color: red">cd</span></span><span class="br"><br></span></p></article>'
-        node.innerHTML = '<article><p><span class="w">a</span><span class="sp"> </span><span class="w">b</span><span class="br"><br></span></p><p><span class="w">c</span><span class="sp"> </span><span class="w">d</span><span class="br"><br></span></p></article>';
+        //node.innerHTML = '<article><p><span class="w">a</span><span class="sp"> </span><span class="w">b</span><span class="br"><br></span></p><p><span class="w">c</span><span class="sp"> </span><span class="w">d</span><span class="br"><br></span></p></article>';
 
     }
 }
