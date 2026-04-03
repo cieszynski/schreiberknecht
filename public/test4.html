@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <title>Schreiberknecht Test4</title>
+    <meta charset="utf-8">
+
+    <style>
+        @page a4w {
+            size: A4 landscape;
+        }
+
+        @page a4 {
+            size: A4 portrait;
+        }
+
+        @page custom {
+            size: 210mm 210mm;
+        }
+
+
+        article {
+            padding: 1em;
+            /*             width: 210mm;
+            height: 297mm; */
+            background-color: #fff;
+            page: a4w;
+
+            &:last-of-type {
+                page: custom;
+            }
+        }
+
+        main {
+            padding: 1em;
+            border: 1px solid black;
+            background-color: #ddd;
+        }
+
+        p {
+            background-color: #eee;
+        }
+
+        span {
+            white-space: pre;
+        }
+
+        span.br {
+            user-select: none;
+            background-color: yellow;
+            display: inline-block;
+            width: 1em;
+        }
+    </style>
+</head>
+
+<body>
+    <main></main>
+    <p>test</p>
+    <script type="module">
+        import { Writer } from './writer.mjs';
+
+        const writer = new Writer(document.querySelector('main'));
+    </script>
+</body>
+
+</html>

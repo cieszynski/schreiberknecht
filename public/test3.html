@@ -22,9 +22,8 @@
 </head>
 
 <body>
-    <main contenteditable="true">
-        <p><span class="br"><br></span></p>
-    </main>
+    <main contenteditable="true"></main>
+    <input>
     <script>
         const main = document.querySelector('main');
 
@@ -42,13 +41,12 @@
             return elem;
         }
 
-        const onDeleteContentBackward = (startNode, endNode, startText, endText, pre, post) => {
-            console.debug('onDeleteContentBackward', startNode === endNode);
-            
+        const onDeleteContent = (startNode, endNode, pre, post) => {
+
             if (startNode === endNode) {
-                
+                console.info('onDeleteContent: startNode === endNode', startNode, endNode)
                 switch (startNode.className) {
-                    case 'br': 
+                    case 'br':
                         return;
                     default:
                         startNode.innerText = pre + post;
@@ -65,7 +63,54 @@
                     startNode.remove();
                 }
             } else {
-                console.log(22, startNode, endNode, endNode.contains(startNode))
+                console.info('onDeleteContent: startNode !== endNode', startNode, endNode)
+                const nodes = [];
+                let offset = 0;
+
+                if (['w'].includes(startNode.className)) {
+                    startNode.innerText = pre;
+                    nodes.push(startNode);
+                    offset += pre.length;
+                }
+
+                if (['sp'].includes(startNode.className) && startNode.previousElementSibling?.className === 'w') {
+                    nodes.push(startNode.previousElementSibling);
+                    offset += startNode.previousElementSibling.innerText.length;
+                }
+
+                nodes.push(createSpan(event.data))
+
+                if (['sp'].includes(endNode.className) && endNode.nextElementSibling?.className === 'w') {
+                    nodes.push(endNode.nextElementSibling);
+                    offset += 0
+                }
+
+                if (['w'].includes(endNode.className)) {
+                    endNode.innerText = post;
+                    nodes.push(endNode);
+                    offset += 0;
+
+                }
+
+                const elem = nodes.reduce((prev, cur, idx, arr) => {
+                    cur.innerText = prev.innerText + cur.innerText;
+                    prev.remove();
+                    return cur;
+                });
+
+                startNode.remove();
+
+                if (elem.innerText) {
+                    endNode.replaceWith(elem);
+                    document
+                        .getSelection()
+                        .collapse(elem.firstChild, offset)
+                } else {
+                    document
+                        .getSelection()
+                        .collapse(endNode.nextElementSibling)
+                    endNode.remove()
+                }
             }
         }
 
@@ -145,14 +190,12 @@
                     let offset = 0;
 
                     if (['w'].includes(startNode.className)) {
-                        console.log(1)
                         startNode.innerText = pre;
                         nodes.push(startNode);
                         offset += pre.length;
                     }
 
                     if (['sp'].includes(startNode.className) && startNode.previousElementSibling?.className === 'w') {
-                        console.log(2)
                         nodes.push(startNode.previousElementSibling);
                         offset += startNode.previousElementSibling.innerText.length;
                     }
@@ -160,13 +203,11 @@
                     nodes.push(createSpan(event.data))
 
                     if (['sp'].includes(endNode.className) && endNode.nextElementSibling?.className === 'w') {
-                        console.log(3)
                         nodes.push(endNode.nextElementSibling);
                         offset += 1
                     }
 
                     if (['w'].includes(endNode.className)) {
-                        console.log(4)
                         endNode.innerText = post;
                         nodes.push(endNode);
                         offset += 1;
@@ -189,47 +230,102 @@
             }
         }
 
+
+
+
         main.addEventListener('beforeinput', event => {
 
             event.preventDefault();
 
             const [range] = event.getTargetRanges();
-            console.log(range)
+            //console.log(range)
 
-            const startText = (range.startContainer === event.target /* firefox */)
-                ? range.startContainer.firstChild.firstChild.firstChild
-                : (range.startContainer.nodeType === Node.ELEMENT_NODE /* firefox */)
-                    ? document.createTextNode(range.startContainer.innerText)
-                    : range.startContainer
+            const [startText, startNode] = function (node) {
 
-            const startNode = (range.startContainer.nodeType === Node.TEXT_NODE)
-                ? (range.startContainer.parentElement === event.target /* firefox */)
-                    ? range.startContainer.parentElement.firstElementChild.firstElementChild
-                    : range.startContainer.parentElement
-                : range.startContainer /* firefox */
+                if (node.nodeType === Node.TEXT_NODE) {
+                    console.info('node.nodeType === Node.TEXT_NODE')
+                    return [
+                        node, node.parentElement
+                    ]
+                }
 
-            const endText = (range.endContainer === event.target /* firefox */)
-                ? range.endContainer.lastChild.lastChild.firstChild
-                : (range.endContainer.nodeType === Node.ELEMENT_NODE /* firefox */)
-                    ? document.createTextNode(range.endContainer.innerText)
-                    : range.endContainer
+                if (node === event.target) {
+                    console.info('node === event.target')
+                    return [
+                        document.createTextNode(node.firstChild.innerText),
+                        node.firstChild.firstChild
+                    ]
+                }
 
-            const endNode = (range.endContainer.nodeType === Node.TEXT_NODE)
-                ? range.endContainer.parentElement
-                : (range.endContainer.parentElement === event.target /* firefox */)
-                    ? range.endContainer.parentElement.lastElementChild.firstElementChild
-                    : range.endContainer /* firefox */
+                // if (node.parentNode === event.target) {
+                //     console.info('node.parentNode === event.target')
+                //     return [
 
-            const pre = startText.data.slice(0, range.startOffset);
-            const post = endText.data.slice(range.endOffset);
+                //     ]
+                // }
 
-            console.log(
-                'startText', startText,
-                'startNode', startNode,
-                'endText', endText,
-                'endNode', endNode,
-                'pre', pre,
-                'post', post)
+                return [node.innerText, node];
+            }(range.startContainer)
+
+            console.log('startText', startText, 'startNode', startNode)
+
+            const [endText, endNode] = function (node) {
+
+                if (node.nodeType === Node.TEXT_NODE) {
+                    console.info('node.nodeType === Node.TEXT_NODE')
+                    return [
+                        node, node.parentElement
+                    ]
+                }
+
+
+
+                // if (node === event.target) {
+                //     console.info('node === event.target')
+                //     return [
+                //         document.createTextNode(node.lastChild.lastChild.previousElementSibling.innerText),
+                //         node.lastChild.lastChild.previousElementSibling
+                //     ]
+                // }
+
+                return [node.innerText, node];
+            }(range.endContainer)
+
+            console.log('endText', endText, 'endNode', endNode)
+            // const startText = (range.startContainer === event.target /* firefox */)
+            //     ? range.startContainer.firstChild.firstChild.firstChild
+            //     : (range.startContainer.nodeType === Node.ELEMENT_NODE /* firefox */)
+            //         ? document.createTextNode(range.startContainer.innerText)
+            //         : range.startContainer
+
+            // const startNode = (range.startContainer.nodeType === Node.TEXT_NODE)
+            //     ? (range.startContainer.parentElement === event.target /* firefox */)
+            //         ? range.startContainer.parentElement.firstElementChild.firstElementChild
+            //         : range.startContainer.parentElement
+            //     : range.startContainer /* firefox */
+
+            // const endText = (range.endContainer === event.target /* firefox */)
+            //     ? range.endContainer.lastChild.lastChild.firstChild
+            //     : (range.endContainer.nodeType === Node.ELEMENT_NODE /* firefox */)
+            //         ? document.createTextNode(range.endContainer.innerText)
+            //         : range.endContainer
+
+            // const endNode = (range.endContainer.nodeType === Node.TEXT_NODE)
+            //     ? range.endContainer.parentElement
+            //     : (range.endContainer.parentElement === event.target /* firefox */)
+            //         ? range.endContainer.parentElement.lastElementChild.firstElementChild
+            //         : range.endContainer /* firefox */
+
+            const pre = startText?.data?.slice(0, range.startOffset);
+            const post = endText?.data?.slice(range.endOffset);
+
+            // console.log(
+            //     'startText', startText,
+            //     'startNode', startNode,
+            //     'endText', endText,
+            //     'endNode', endNode,
+            //     'pre', pre,
+            //     'post', post)
 
             if (range.startContainer !== range.endContainer) {
                 // über mehre Worte/Leerzeichen/Absätze
@@ -261,12 +357,17 @@
                 }
             }
 
+            console.log(event.inputType)
             switch (event.inputType) {
                 case 'insertText':
                     return onInsertText(startNode, endNode, startText, endText, pre, post, event.data);
 
                 case 'deleteContentBackward':
-                    return onDeleteContentBackward(startNode, endNode, startText, endText, pre, post);
+                case 'deleteContentForward':
+                case 'deleteContent':
+                case 'deleteByDrag':
+                case 'deleteByCut':
+                    return onDeleteContent(startNode, endNode, pre, post);
 
                 default:
                     console.log(event.inputType)
@@ -281,9 +382,87 @@
             //     'post', post)
         });
 
+        main.innerHTML = '<p><span class="br"><br></span></p>';
+
+        // webkit: vehindert, dass das Löschen über den Anfang hinaus
+        const observer = new MutationObserver((mutationList, observer) => {
+            for (const mutation of mutationList) {
+                observer.disconnect();
+                mutation.target.innerHTML = '<p><span class="br"><br></span></p>';
+                document
+                    .getSelection()
+                    .collapse(mutation.target.firstChild.firstChild);
+                observer.observe(mutation.target, {
+                    childList: true
+                });
+            }
+        });
+
+        observer.observe(main, {
+            childList: true
+        });
+
+        //main.addEventListener("selectstart", (event) => { console.log(event) })
+
         main.addEventListener('input', event => {
             event.preventDefault()
         });
+
+
+        document.addEventListener("selectionchange", (event) => {
+
+            const selection = document.getSelection();
+
+            if (selection.anchorNode === selection.focusNode) return;
+
+            const bit = (selection.anchorNode.compareDocumentPosition(selection.focusNode)
+                & Node.DOCUMENT_POSITION_FOLLOWING);
+
+            const [startNode, endNode] = (bit === 4)
+                ? [selection.anchorNode, selection.focusNode]
+                : [selection.focusNode, selection.anchorNode];
+
+            let start = startNode;
+            let end = endNode;
+
+                console.log(1, start, end)
+
+            
+
+            if (startNode.isContentEditable && endNode.isContentEditable) {
+                start = startNode.querySelector('span.w, span.br');
+                end = endNode.lastChild;
+                selection.setBaseAndExtent(start.firstChild, 0, end.firstChild, 0);
+                return
+            }
+
+            if (endNode.isContentEditable) {
+                end = endNode.lastChild;
+                selection.setBaseAndExtent(start.firstChild, 0, end.firstChild, 0);
+                return
+            }
+
+            if (endNode.nodeName==='P') {
+                end = endNode.lastChild//.querySelector('span.w, span.br')
+                selection.setBaseAndExtent(start.firstChild, 0, end.firstChild, 0);
+                return
+            }
+
+                console.log(2, start, end)
+            try {
+                //selection.setBaseAndExtent(start, 0, end, 0)
+            } catch (ex) { console.error(ex) }
+
+            /*             switch (selection.type) {
+                            case 'Caret':
+                                break;
+                            case 'Range':
+                                break;
+                            default:
+                                console.info('Selection: None')
+                        } */
+            /* console.log(selection) console.log(selection.type);*/
+        })
     </script>
 </body>
 
