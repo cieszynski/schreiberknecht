@@ -31,7 +31,7 @@
             }
         }
 
-        main {
+        div {
             padding: 1em;
             border: 1px solid black;
             background-color: #ddd;
@@ -42,12 +42,17 @@
         }
 
         span {
-            white-space: pre;
+            /* white-space: pre; */
+        }
+
+        span.ep {
+            background-color: yellow;
+            /* display: none; */
+            width: 0em;
         }
 
         span.br {
-            user-select: none;
-            background-color: yellow;
+            background-color: green;
             display: inline-block;
             width: 1em;
         }
@@ -55,12 +60,21 @@
 </head>
 
 <body>
-    <main></main>
-    <p>test</p>
+    <div><article><p><span class="ep"><br></span></p></article></div>
+    <hr>
+    <div><article><p><span class="w">aaa</span><span class="ep"><br></span></p></article></div>
+    <hr>
+    <div><article><p><span class="w">aa<span style="color: red">red</span><span style="color: blue">blue</span>AA<span style="color: green">green</span>BB<span class="ep"><br></span></p></article></div>
+    <hr>
+    <div><article><p><span class="w">aaa</span><span class="sp"> </span><span class="w">bbb</span><span class="ep"><br></span></p></article></div>
+    <hr>
+    <div><article><p><span class="cm">,</span><span class="w">aaa</span><span class="cm">,</span><span class="w">bbb</span><span class="ep"><br></span></p></article></div>
     <script type="module">
         import { Writer } from './writer.mjs';
 
-        const writer = new Writer(document.querySelector('main'));
+        document.querySelectorAll('div').forEach(element => {
+            const writer = new Writer(element)
+        });
     </script>
 </body>
 

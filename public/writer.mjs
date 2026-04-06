@@ -1,91 +1,4 @@
 
-
-class Selection {
-
-    constructor(node) {
-        this.node = node;
-
-        document.addEventListener("selectionchange", this, { once: true });
-    }
-
-    handleEvent(event) {
-
-        const selection = document.getSelection();
-
-        const bit = (selection.anchorNode.compareDocumentPosition(selection.focusNode)
-            & Node.DOCUMENT_POSITION_FOLLOWING);
-
-        const [startNode, endNode] = (bit === 4)
-            ? [selection.focusNode, selection.anchorNode]
-            : [selection.anchorNode, selection.focusNode];
-
-
-        //        const first = document.createExpression("(.//span)[1]");
-        //        const last = document.createExpression("(.//span[not(@class='br')])[last()]");
-
-        const first = document.evaluate(
-            "(.//span)[1]/text()",
-            startNode,
-            null,
-            XPathResult.FIRST_ORDERED_NODE_TYPE,
-            null,
-        );
-
-        const last = document.evaluate(
-            "(.//span[not(@class='br')])[last()]",
-            endNode,
-            null,
-            XPathResult.FIRST_ORDERED_NODE_TYPE,
-            null,
-        );
-
-        console.log(startNode, endNode, first.singleNodeValue, last.singleNodeValue)
-        if (selection.anchorNode === this.node) {
-            const range = new Range();
-            range.setStartBefore(first.singleNodeValue);
-            range.setEndAfter(last.singleNodeValue);
-            //document.removeEventListener("selectionchange", this);
-            //selection.setBaseAndExtent(first.singleNodeValue, 0, last.singleNodeValue, 1);
-            selection.addRange(range);
-        }
-        setTimeout(() => {
-            document.addEventListener("selectionchange", this, { once: true });
-        }, 500)
-    }
-}
-
-class Observer extends MutationObserver {
-
-    constructor(node) {
-
-        const options = {
-            subtree: true,
-            childList: true,
-            characterDataOldValue: true
-        }
-
-        super((mutationList, observer) => {
-
-            mutationList.push(...observer.takeRecords());
-
-            this.disconnect();
-
-            for (const mutation of mutationList) {
-
-                switch (mutation.type) {
-                    case 'characterData':
-                        //console.log(mutation)
-                        break;
-                }
-            }
-
-            this.observe(node, options);
-        })
-
-        this.observe(node, options);
-    }
-}
-
 const evaluateXPath = (node, xpath) => document.evaluate(
     xpath,
     node,
@@ -103,85 +16,325 @@ const createSpan = (text) => {
         case ' ':
             elem.className = 'sp';
             break;
+        case ',':
+            elem.className = 'cm';
+            break;
         default:
             elem.className = 'w';
     }
     return elem;
 }
 
-class Input {
+const createSpanBr = (name = 'br') => {
+    const elem = document.createElement('span');
+    elem.append(document.createElement('br'));
+    elem.className = 'br';
+    return elem;
+}
+
+const joinNodes = (node1, node2) => {
+    // TODO
+    node1.innerText += node2.innerText;
+    node2.remove();
+}
+
+const splitNode = (node, pre, post, data) => {
+    const sp = createSpan(data);
+
+    if (pre) {
+        node.innerText = pre;
+        node.after(sp);
+    } else {
+        node.replaceWith(sp);
+    }
+
+    if (post) {
+        const span = createSpan(post);
+        sp.after(span);
+    }
+
+    document
+        .getSelection()
+        .collapse(sp.firstChild, 1);
+}
+
+// https://en.wikipedia.org/wiki/Punctuation
+const findClassName = (punctuation) => {
+    const marks = {
+        '\n': 'br',
+        ' ': 'sp',
+        '?': 'qm',
+        '!': 'em',
+        ',': 'cm'
+    }
+
+    return marks?.[punctuation] || 'xx';
+};
+
+// https://stackoverflow.com/questions/150033/
+const regex = new RegExp(/([^\u00C0-\u1FFF\u2C00-\uD7FF\w])/vi);
+
+function parse(string) {
+
+    const nodes = [];
+
+    string.split(regex).forEach(token => {
+
+        if (token.length >= 1) {
+
+            const span = document.createElement('span');
+            span.appendChild(new Text(token));
+
+            if (!regex.test(token)) {
+                span.className = 'w';
+
+            } else {
+                span.className = findClassName(token);
+            }
+
+            nodes.push(span);
+        }
+    })
+
+    return nodes;
+}
+
+class RangePart {
+
+    constructor(node, offset) {
+
+        const path = [];
+
+        if (node.nodeType === Node.TEXT_NODE) {
+            node = node.parentElement;
+
+            path.push({ node: node, offset: offset });
+
+            while (node.style.length) {
+                let prev = node.previousSibling;
+                let offset = 0;
+
+                while (prev) {
+                    offset++; // Nodes, nicht Zeichen
+                    prev = prev.previousSibling;
+                }
+
+                node = node.parentElement;
+                path.push({ node: node, offset: offset });
+            }
+        }
+
+        Object.defineProperties(this, {
+            'node': {
+                get: () => node
+            },
+            'path': {
+                get: () => path
+            }
+        });
+
+        Object.freeze(this);
+    }
+}
+
+class RangeContainer {
+
+    constructor(range) {
+
+        const start = new RangePart(range.startContainer, range.startOffset);
+        //const end = new RangePart(range.endContainer, range.endOffset);
+
+        Object.defineProperties(this, {
+            'start': {
+                get: () => start
+            },
+            'end': {
+                get: () => end
+            }
+        });
+
+        Object.freeze(this);
+    }
+}
+
+class TargetRange extends StaticRange {
+
+    constructor(range) {
+
+        let startContainer = range.startContainer,
+            startOffset = range.startOffset,
+            endContainer = range.endContainer,
+            endOffset = range.endOffset,
+            collapsed = range.collapsed;
+
+        if (range.startContainer.nodeType === Node.TEXT_NODE) {
+            
+            // Sorgt dafür, dass zwischen zwei TEXT_NODES der vorherige
+            // ausgewählt wird und offset auf die Länge des TEXT_NODES
+            if (range.startOffset == 0 && range.endOffset == 0) {
+                console.debug(1)
+                startContainer = evaluateXPath(range.startContainer,`
+                      (
+                        ../preceding-sibling::span/text() | 
+                        ./preceding-sibling::span/text() |
+                        ../preceding-sibling::text() |
+                        ./preceding-sibling::text() 
+                      )[last()]
+                    `
+                ) || startContainer;
+
+                if (startContainer !== range.startContainer) {
+                    startOffset = startContainer.data.length;
+                }
+
+                if (range.collapsed) {
+                    endContainer = startContainer;
+                    endOffset = startOffset;
+                }
+            }
+        }
+
+        if (!range.collapsed) {
+            if (range.endContainer.nodeType === Node.TEXT_NODE) {
+                if (range.startOffset == 0 && range.endOffset == 0) {
+                    console.debug(2)
+                    endContainer = evaluateXPath(range.endContainer, '(preceding-sibling::span/text())[last()] | .');
+                    startOffset = endContainer.data.length;
+                }
+            }
+        }
+
+        super({
+            startContainer: startContainer,
+            startOffset: startOffset,
+            endContainer: endContainer,
+            endOffset: endOffset,
+            collapsed: collapsed
+        });
+
+    }
+}
+
+class TypeWriter {
 
     constructor(node) {
 
         node.addEventListener('beforeinput', this);
     }
 
-    handleEvent(event) {
-        // console.log(event)
+    onInsertContent(startNode, endNode, startOffset, endOffset, data) {
+        console.debug('onInsertContent', {
+            startNode: startNode,
+            startOffset: startOffset,
+            endNode: endNode,
+            endOffset: endOffset,
+            equal: startNode === endNode,
+            data: data
+        });
 
+        const selection = document.getSelection();
+        console.debug(selection.anchorNode)
+
+        const pre = startNode.innerText.slice(0, startOffset)
+        const post = endNode.innerText.slice(endOffset)
+
+        if (startNode === endNode) {
+            if ('ep' === startNode.className) {
+                console.debug('ep');
+
+                const span = createSpan(data);
+                startNode
+                    .before(span);
+                document
+                    .getSelection()
+                    .collapse(span.firstChild, startOffset + data.length);
+                return;
+            }
+
+            if ('w' === startNode.className) {
+                console.debug('WORD');
+
+                const span = createSpan(data);
+
+                return;
+            }
+
+            if (['sp', 'br', 'cm'].includes(startNode.className)) {
+                console.debug('SIGNS');
+                const span = createSpan(data);
+
+
+                return;
+            }
+
+            throw new Error(`unknown className: ${startNode.className}`)
+        }
+    }
+
+    handleEvent(event) {
         event.preventDefault();
 
         const [range] = event.getTargetRanges();
 
-        console.log(range)
+        const section = new TargetRange(range);
 
-        let startText = range.startContainer;
-        let startOffset = range.startOffset;
+        //  console.clear()
 
-        if (startText.nodeType === Node.ELEMENT_NODE) {
-            startText = evaluateXPath(range.startContainer, `
-                ((.//span[not(@class="br")])[1])/text()
-            `);
-        }
+        console.log(range, section)//section.start.node, section.start.path)
+        //console.log(parse("hallo welt, wie geht's dir?\nVielleicht átwas bässer!").map(node => node.outerHTML))
+        return
+        console.dir(range, section)
 
-        let endText = range.endContainer;
-        let endOffset = range.endOffset;
+        const [startNode, startOffset, endNode, endOffset] = function (start, offset1, end, offset2) {
 
-        if (endText.nodeType === Node.ELEMENT_NODE) {
-            endText = evaluateXPath(range.endContainer, `
-                ((.//span[not(@class="br")])[last()])/text() |
-                ((..//span[not(@class="br")])[last()])/text()
-            `);
-        }
+            if (start === end) {
+                if (start.nodeType === Node.TEXT_NODE) {
+                    start = start.parentElement;
 
-        console.log(startText, endText)
-        if (!(startText && endText)) {
-            //return; /* firefox? */
-        }
+                    while (start.style.length) {
+                        start = start.parentElement;
+                    }
 
-        switch (true) {
-            case (startText === null && endText === null):
-                if (range.startContainer === range.endContainer) {
-                    const br = evaluateXPath(range.startContainer, `
-                        ((.//span[@class="br"])[1]) |
-                        ((..//span[@class="br"])[1])
-                    `);
-                    const span = createSpan('');
-                    br.before(span);
-
-                    startText = endText = span.firstChild;
-                    startOffset = endOffset = 0;
-                } else {
-                    console.info('TODO 1')
+                    end = start;
                 }
-                break;
-            case (startText === null): // endContainer = span.br
-                    //console.info('TODO 2', range.startContainer, range.startContainer === range.endContainer)
-                    startText = endText;
-                break;
 
-            case (endText === null):
-                    console.info('TODO 3')
-                break;
+                if (start === event.target || ['ARTICLE', 'P'].includes(start.nodeName)) {
+                    start = end = evaluateXPath(start, '(.//span)[1]');
+                }
 
-            default:
-                console.info(startText, startOffset, endText, endOffset)
-        }
+                if (start.className == 'ep' && start.previousElementSibling) {
+                    start = end = start.previousElementSibling;
+                }
 
-        const startNode = startText.parentElement;
-        const endNode = endText.parentElement;
+                if (start.className == 'br' && start.previousElementSibling) {
+                    start = end = start.previousElementSibling;
+                }
+
+                if (['sp', 'cm'].includes(start.className)) {
+                    if (offset1 === 0 && offset2 === 0 && start.previousElementSibling) {
+                        start = end = start.previousElementSibling;
+                        offset1 = offset2 = start.innerText.length
+                    }
+                }
+            } else {
+
+            }
+
+            return [start, offset1, end, offset2]
+        }(range.startContainer, range.startOffset, range.endContainer, range.endOffset)
+
+        console.debug('from range:\n', {
+            startNode: startNode,
+            startOffset: startOffset,
+            endNode: endNode,
+            endOffset: endOffset,
+            equal: startNode === endNode
+        })
+
+        return
 
         if (startNode !== endNode) {
+            console.log(startNode, endNode)
             //console.log(startText.parentElement, endText.parentElement)
 
             const startBlock = startNode.closest('p, h1');
@@ -226,125 +379,11 @@ class Input {
             }
         }
 
-        const pre = startText?.data?.slice(0, startOffset);
-        const post = endText?.data?.slice(endOffset);
-
         switch (event.inputType) {
             case 'insertText':
-                return this.onInsertText(startNode, endNode, pre, post, event.data);
-
-            case 'deleteContentBackward':
-                return this.onDeleteContent(startNode, endNode, pre, post);
-
+                return this.onInsertContent(startNode, endNode, startOffset, endOffset, event.data);
             default:
-                console.log(event.inputType)
-        }
-    }
-
-    onDeleteContent(startNode, endNode, pre, post) {
-        console.debug('onDeleteContent', {
-            startNode: startNode,
-            endNode: endNode,
-            equal: startNode === endNode,
-            pre: pre,
-            post: post
-        });
-
-        if (startNode === endNode) {
-            switch (startNode.className) {
-                case 'br':
-                   break// return;
-                default:
-                    startNode.innerText = pre + post;
-            }
-
-            if (startNode.innerText) {
-                console.log(1)
-                document
-                    .getSelection()
-                    .collapse(startNode.firstChild, pre.length);
-
-            } else {
-                console.log(2, startNode.nextElementSibling)
-                document
-                    .getSelection()
-                    .collapse(
-                        startNode.nextElementSibling.className==='br'
-                        ? startNode.nextElementSibling
-                        : startNode.nextElementSibling.firstChild
-                    );
-                startNode.remove();
-            }
-        } else {
-
-        }
-    }
-
-    onInsertText(startNode, endNode, pre, post, data) {
-        console.debug('onInsertText', {
-            startNode: startNode,
-            endNode: endNode,
-            equal: startNode === endNode,
-            pre: pre,
-            post: post
-        });
-
-        if (startNode === endNode) {
-            switch (startNode.className) {
-                case 'br': {
-                    const span = createSpan(data);
-                    startNode
-                        .before(span);
-                    document
-                        .getSelection()
-                        .collapse(span.firstChild, span.innerText.length);
-                    break;
-                }
-
-                case 'sp': {
-                    const span = createSpan(data);
-                    // Cursor vor oder nach dem Leerzeichen
-                    if (post.length) { // vor
-                        startNode.before(span);
-                    } else { // nach
-                        startNode.after(span);
-                    }
-                    document
-                        .getSelection()
-                        .collapse(span.firstChild, 1)
-                    break;
-                }
-
-                default:
-                    if ([' '].includes(data)) {
-                        const sp = createSpan(data);
-
-                        if (pre) {
-                            startNode.innerText = pre;
-                            startNode.after(sp);
-                        } else {
-                            startNode.replaceWith(sp);
-                        }
-
-                        if (post) {
-                            const span = createSpan(post);
-                            sp.after(span);
-                        }
-
-                        document
-                            .getSelection()
-                            .collapse(sp.firstChild, 1);
-
-                    } else {
-                        startNode.innerText = `${pre}${data}${post}`;
-                        document
-                            .getSelection()
-                            .collapse(startNode.firstChild, pre.length + data.length);
-                    }
-                    break;
-            }
-        } else {
-            console.info('TODO: startNode !== endNode')
+                console.log(event.inputType);
         }
     }
 }
@@ -353,17 +392,9 @@ class Writer {
 
     constructor(node) {
 
-        const input = new Input(node);
-        //const observer = new Observer(node);
-        //const selection = new Selection(node);
+        const input = new TypeWriter(node);
 
         node.contentEditable = true;
-        //node.innerHTML = '<article><p><span class="w">aaa</span><span class="br"><br></span></p><p><span class="w2">b</span><span class="br"><br></span></p></article>';
-        node.innerHTML = '<article><p><span class="br"><br></span></p></article>'
-        //node.innerHTML = '<article><p><span class="w">a</span><span class="sp"> </span><span class="w">b</span><span class="sp"> </span><span class="w">c</span><span class="br"><br></span></p></article>'
-        //node.innerHTML = '<article><p><span class="w">ab<span style="color: red">cd</span></span><span class="br"><br></span></p></article>'
-        //node.innerHTML = '<article><p><span class="w">a</span><span class="sp"> </span><span class="w">b</span><span class="br"><br></span></p><p><span class="w">c</span><span class="sp"> </span><span class="w">d</span><span class="br"><br></span></p></article>';
-
     }
 }
 
