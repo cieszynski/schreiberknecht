@@ -164,16 +164,15 @@ class TargetRange extends StaticRange {
         let startContainer = range.startContainer,
             startOffset = range.startOffset,
             endContainer = range.endContainer,
-            endOffset = range.endOffset,
-            collapsed = range.collapsed;
+            endOffset = range.endOffset;
 
         if (range.startContainer.nodeType === Node.TEXT_NODE) {
-            
+
             // Sorgt dafür, dass zwischen zwei TEXT_NODES der vorherige
             // ausgewählt wird und offset auf die Länge des TEXT_NODES
             if (range.startOffset == 0 && range.endOffset == 0) {
-                console.debug(1)
-                startContainer = evaluateXPath(range.startContainer,`
+                console.debug(1001)
+                startContainer = evaluateXPath(range.startContainer, `
                       (
                         ../preceding-sibling::span/text() | 
                         ./preceding-sibling::span/text() |
@@ -194,22 +193,102 @@ class TargetRange extends StaticRange {
             }
         }
 
-        if (!range.collapsed) {
-            if (range.endContainer.nodeType === Node.TEXT_NODE) {
-                if (range.startOffset == 0 && range.endOffset == 0) {
-                    console.debug(2)
-                    endContainer = evaluateXPath(range.endContainer, '(preceding-sibling::span/text())[last()] | .');
-                    startOffset = endContainer.data.length;
-                }
+        // Passiert im FF u.a. wenn mit Strg+A der gesamte Textbereich
+        // ausgewählt wird: Dann ist StartContainer kein TEXT_NODE,
+        // sondern ein Block-Element
+        if (range.startContainer.nodeType === Node.ELEMENT_NODE) {
+
+            if ('ep' === range.startContainer.className) {
+                console.debug(1002, range.startContainer)
+
+                startContainer = evaluateXPath(range.startContainer, `
+                    (
+                        ./preceding-sibling::span/text()
+                    )[last()]
+                    `
+                ) || range.startContainer;
+
+                // Wenn ein TEXT_NODE gefunden wurde, Offset ist das letzte Zeichen,
+                // ansonsten 0, <span.ep>
+                startOffset = startContainer?.data?.length || 0;
+            }
+
+            // Wenn der StartContainer ein Block-Element ist, dann den ersten
+            // TEXT_NODE oder <span.ep> im Element finden
+
+            if (['DIV', 'ARTICLE', 'P'].includes(range.startContainer.nodeName)
+                && (range.startOffset == 0 && range.endOffset >= 1)) {
+
+                console.debug(1003, range.startContainer)
+
+                startContainer = evaluateXPath(range.startContainer, `
+                    (
+                        .//span/text() |
+                        .//span[@class='ep']
+                    )[1]
+                    `
+                );
+
+                // startOffset bleibt 0
             }
         }
+
+        // Passiert im FF u.a. wenn mit Strg+A der gesamte Textbereich
+        // ausgewählt wird: Dann ist EndContainer kein TEXT_NODE,
+        // sondern ein Block-Element
+        if (range.endContainer.nodeType === Node.ELEMENT_NODE) {
+
+            // Passiert im FF, wenn mit der Maus ein Bereich bist zum Textende
+            // ausgewählt wird
+            if ('ep' === range.endContainer.className) {
+                console.debug(1004, range.endContainer)
+
+                endContainer = evaluateXPath(range.endContainer, `
+                    (
+                        ./preceding-sibling::span/text()
+                    )[last()]
+                    `
+                ) || range.endContainer;
+
+                // Wenn ein TEXT_NODE gefunden wurde, Offset ist das letzte Zeichen,
+                // ansonsten 0, <span.ep>
+                endOffset = endContainer?.data?.length || 0;
+
+            }
+
+            // Wenn der Endcontainer ein Block-Element ist, dann den letzten
+            // TEXT_NODE oder <span.ep> im Element finden
+            if (['DIV', 'ARTICLE', 'P'].includes(range.endContainer.nodeName)
+                && (range.startOffset == 0 && range.endOffset >= 1)) {
+
+                console.debug(1005, range.endContainer)
+
+                endContainer = evaluateXPath(range.endContainer, `
+                      (
+                        .//span[@class='ep'][not(preceding-sibling::span)] |
+                        .//span/text()
+                    )[last()]
+                `);
+
+                // Wenn ein TEXT_NODE gefunden wurde, Offset ist das letzte Zeichen,
+                // ansonsten 0, (<span.ep>)
+                endOffset = endContainer?.data?.length || 0;
+            }
+        }
+
+        console.assert(startContainer.nodeType === Node.TEXT_NODE
+            || startContainer.className === 'ep');
+        console.assert(endContainer.nodeType === Node.TEXT_NODE
+            || endContainer.className === 'ep');
 
         super({
             startContainer: startContainer,
             startOffset: startOffset,
             endContainer: endContainer,
             endOffset: endOffset,
-            collapsed: collapsed
+            collapsed:
+                (startContainer === endContainer)
+                && (startOffset == endOffset)
         });
 
     }
@@ -280,7 +359,9 @@ class TypeWriter {
 
         //  console.clear()
 
-        console.log(range, section)//section.start.node, section.start.path)
+        console.log(range)
+        console.log(section)
+        //console.log(range, section)//section.start.node, section.start.path)
         //console.log(parse("hallo welt, wie geht's dir?\nVielleicht átwas bässer!").map(node => node.outerHTML))
         return
         console.dir(range, section)
