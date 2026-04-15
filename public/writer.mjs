@@ -74,6 +74,8 @@ const findClassName = (punctuation) => {
 // https://stackoverflow.com/questions/150033/
 const regex = new RegExp(/([^\u00C0-\u1FFF\u2C00-\uD7FF\w])/vi);
 
+const tokenize = (string) => string.split(regex).filter(token => token.length);
+
 function parse(string) {
 
     const nodes = [];
@@ -99,63 +101,7 @@ function parse(string) {
     return nodes;
 }
 
-class RangePart {
 
-    constructor(node, offset) {
-
-        const path = [];
-
-        if (node.nodeType === Node.TEXT_NODE) {
-            node = node.parentElement;
-
-            path.push({ node: node, offset: offset });
-
-            while (node.style.length) {
-                let prev = node.previousSibling;
-                let offset = 0;
-
-                while (prev) {
-                    offset++; // Nodes, nicht Zeichen
-                    prev = prev.previousSibling;
-                }
-
-                node = node.parentElement;
-                path.push({ node: node, offset: offset });
-            }
-        }
-
-        Object.defineProperties(this, {
-            'node': {
-                get: () => node
-            },
-            'path': {
-                get: () => path
-            }
-        });
-
-        Object.freeze(this);
-    }
-}
-
-class RangeContainer {
-
-    constructor(range) {
-
-        const start = new RangePart(range.startContainer, range.startOffset);
-        //const end = new RangePart(range.endContainer, range.endOffset);
-
-        Object.defineProperties(this, {
-            'start': {
-                get: () => start
-            },
-            'end': {
-                get: () => end
-            }
-        });
-
-        Object.freeze(this);
-    }
-}
 
 class TargetRange extends StaticRange {
 
@@ -301,7 +247,7 @@ class TypeWriter {
         node.addEventListener('beforeinput', this);
     }
 
-    onInsertContent(startNode, endNode, startOffset, endOffset, data) {
+    onInsertContent1(startNode, endNode, startOffset, endOffset, data) {
         console.debug('onInsertContent', {
             startNode: startNode,
             startOffset: startOffset,
@@ -350,20 +296,329 @@ class TypeWriter {
         }
     }
 
+    onInsertContent2(range, data) {
+        console.table([range]);
+
+        const content = parse(data);
+        let tokens = tokenize(data);
+
+        if (range.collapsed) {
+
+            // leeres <p>, container ist <span.ep>
+            if (range.startContainer.nodeType === Node.ELEMENT_NODE) {
+                console.debug(1001)
+
+                const nodes = tokens.map(token => {
+                    const span = document.createElement('span');
+                    span.appendChild(new Text(token));
+
+                    if (regex.test(token)) {
+                        span.className = findClassName(token);
+                    } else {
+                        span.className = 'w';
+                    }
+                    try {
+                        document
+                            .getSelection()
+                            .collapse(span, token.length);
+                    } catch (ex) { console.error(ex) }
+                    return span;
+                });
+
+                range.startContainer.before(...nodes);
+
+                return;
+            }
+
+
+            if (range.startContainer.nodeType === Node.TEXT_NODE) {
+                console.debug(1002)
+
+                tokens.unshift(range.startContainer.data.slice(0, range.startOffset));
+                tokens.push(range.startContainer.data.slice(range.startOffset));
+
+                const nodes = [];
+
+                tokens = tokens.filter(token => token.length);
+
+                for (let n = 0; n < tokens.length; n++) {
+                    const span = document.createElement('span');
+
+                    if (!regex.test(tokens[n])) {
+
+                        if ((n < tokens.length - 1) && !regex.test(tokens[n + 1])) {
+                            span.appendChild(new Text(tokens[n] + tokens[n + 1]));
+                            n++;
+                        } else {
+                            span.appendChild(new Text(tokens[n]));
+                        }
+                        span.className = 'w';
+                    } else {
+                        span.appendChild(new Text(tokens[n]));
+                        span.className = findClassName(tokens[n]);
+                    }
+
+                    nodes.push(span)
+                }
+                //const nodes = tokens.map((token, idx, arr) => {
+
+                //     if ((!regex.test(prev)) && (!regex.test(cur))) {
+                //         return prev + cur
+                //     } else {
+                //         return cur
+                //     }
+                // })
+                console.log(tokens, nodes)
+                range.startContainer.parentElement.replaceWith(...nodes);
+                return;
+            }
+        } else {
+            console.debug(2000)
+
+        }
+        return
+        console.debug(tokens);
+
+        if (range.startContainer.nodeType === Node.ELEMENT_NODE
+            && range.endContainer.nodeType === Node.ELEMENT_NODE) {
+            console.debug(1000)
+
+            // leeres <p>, container ist <span.ep>
+            if (range.startContainer === range.endContainer) {
+                console.debug(1001)
+
+                const nodes = tokens.map(token => {
+                    const span = document.createElement('span');
+                    span.appendChild(new Text(token));
+
+                    if (regex.test(token)) {
+                        span.className = findClassName(token);
+                    } else {
+                        span.className = 'w';
+                    }
+
+                    document
+                        .getSelection()
+                        .collapse(span, token.length);
+                    return span;
+                });
+
+                range.startContainer.before(...nodes);
+            } else {
+                console.debug(1002)
+            }
+        }
+
+        if (range.startContainer.nodeType === Node.TEXT_NODE
+            && range.endContainer.nodeType === Node.TEXT_NODE) {
+
+            if (range.startContainer === range.endContainer) {
+
+                if (range.startContainer.parentElement.style.length) {
+                    console.debug(2000)
+
+                } else {
+                    console.debug(2010)
+
+                    if (regex.test(token)) {
+
+                    } else {
+                        const text1 = range.startContainer;
+                        const text2 = text1.splitText(range.startOffset);
+                        const text3 = new Text(token)
+                    }
+                }
+            } else {
+                console.debug(3000)
+
+            }
+            /*
+            if (range.startContainer === range.endContainer) {
+
+                const text1 = range.startContainer;
+                const text2 = text1.splitText(range.startOffset);
+                const parent = range.startContainer.parentElement;
+                const pre = content.shift();
+
+                if (parent.className == 'w' && pre.className == 'w') {
+                    console.debug(2010)
+                    text1.after(pre.firstChild, text2);
+
+                    document
+                        .getSelection()
+                        .collapse(text2);
+
+                    parent.normalize();
+
+                    return;
+                }
+
+                if (parent.className == 'w') {
+                    console.debug(2011)
+
+                    if (text2.data) {
+                        console.debug(2012)
+                        const span = document.createElement('span');
+                        // verschiebt text2 von parent nach span:
+                        span.appendChild(text2);
+                        span.className = 'w';
+                        parent.after(pre, span);
+
+                        document
+                            .getSelection()
+                            .collapse(text2);
+                    } else {
+                        console.debug(2013)
+                        parent.after(pre);
+
+                        document
+                            .getSelection()
+                            .collapse(pre, 1);
+                    }
+                    return;
+
+                }
+
+                if (parent.className != 'w') {
+                    console.debug(2014)
+
+                    if (pre.className == 'w' && (parent.nextElementSibling && parent.nextElementSibling.className == 'w')) {
+                        console.debug(2015)
+                        parent.nextElementSibling.appendChild(pre.firstChild)
+
+                        document
+                            .getSelection()
+                            .collapse(pre, 1);
+                        parent.nextElementSibling.normalize();
+                    } else {
+                        console.debug(2016)
+                        parent.after(pre);
+
+                        document
+                            .getSelection()
+                            .collapse(pre, 1);
+                    }
+                }
+            } else {
+                console.debug(3000)
+            }
+                */
+        }
+    }
+
+
+    onInsertContent(range, data) {
+        console.table([range]);
+
+        if (!range.collapsed) {
+
+
+        }
+    }
+
     handleEvent(event) {
+        console.clear();
         event.preventDefault();
 
         const [range] = event.getTargetRanges();
 
-        const section = new TargetRange(range);
+        const targetrange = new TargetRange(range);
 
-        //  console.clear()
+        const data = function (event) {
+            if (event.dataTransfer) {
+                return event.dataTransfer
+                    .getData('text/plain');
+            }
 
-        console.log(range)
-        console.log(section)
-        //console.log(range, section)//section.start.node, section.start.path)
-        //console.log(parse("hallo welt, wie geht's dir?\nVielleicht átwas bässer!").map(node => node.outerHTML))
+            return event.data; // kann null sein
+        }(event);
+
+        const [left, right] = function (range) {
+
+            let start = range.startContainer,
+                end = range.endContainer,
+                left = start,
+                right = end;
+
+            const nodes = new Set();
+
+            while (!left.contains(end)) {
+
+                let next = left.nextSibling;
+
+                while (next && !next.contains(end)) {
+                    nodes.add(next);
+                    next = next.nextSibling;
+                }
+
+                if (left.parentElement.contains(end))
+                    break;
+
+                left = left.parentElement;
+            }
+
+
+            while (!right.contains(start)) {
+
+                let prev = right.previousSibling;
+
+                while (prev && !prev.contains(start)) {
+                    nodes.add(prev);
+                    prev = prev.previousSibling;
+                }
+
+                if (right.parentElement.contains(start))
+                    break;
+
+                right = right.parentElement;
+            }
+
+            nodes.forEach(item => item.remove());
+
+            switch (true) {
+                case ((left.nodeType === right.nodeType) && (left.nodeType === Node.TEXT_NODE)): {
+                    console.log(101, range.startOffset, range.endOffset)
+                    if (left === right) {
+                        console.log(101, left, right)
+                        left.replaceData(range.startOffset, range.endOffset - range.startOffset, '')
+                    } else {
+                        console.log(102, left, right)
+                    }
+                    break;
+                }
+
+                case ((left.nodeType === right.nodeType) && (left.nodeType === Node.ELEMENT_NODE)): {
+                    if (left === right) {
+                        console.log(201, left, right)
+
+                    } else {
+                        console.log(202, left, right)
+                        //left.replaceData(range.startOffset, left.length - range.startOffset, '')
+                    }
+                    break;
+                }
+                default:
+                    console.log(404, left.nodeType, right.nodeType)
+            }
+            return [left, right]
+        }(range);
+
+        console.log(left, right)
+
+        if (left !== right) {
+
+        }
         return
+
+        switch (event.inputType) {
+            case 'insertText':
+            case 'insertFromPaste':
+                return this.onInsertContent(targetrange, data);
+            default:
+                console.log(event.inputType);
+        }
+        return
+
         console.dir(range, section)
 
         const [startNode, startOffset, endNode, endOffset] = function (start, offset1, end, offset2) {
