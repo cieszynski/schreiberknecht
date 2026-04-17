@@ -102,8 +102,141 @@ function parse(string) {
 }
 
 
+const mergeContainer = (target, source) => {
 
-class TargetRange extends StaticRange {
+    const offset = target.firstChild.length;
+
+    while (source.firstChild) {
+        target.appendChild(source.firstChild);
+    }
+
+    target.normalize();
+    source.remove();
+
+    console.log(offset, target.firstChild.length)
+    document
+        .getSelection()
+        .collapse(target.firstChild, offset);
+
+}
+
+// Range, der die Informationen für den Gebrauch bereitstellt
+class AlignedRange extends StaticRange {
+
+    constructor(range) {
+
+        let start = range.startContainer,
+            end = range.endContainer,
+            left = start,
+            right = end,
+            leftOffset = range.startOffset,
+            rightOffset = range.endOffset;
+
+        const nodes = new Set();
+
+        while (!left.contains(end)) {
+
+            let next = left.nextSibling;
+
+            while (next && !next.contains(end)) {
+                nodes.add(next);
+                next = next.nextSibling;
+            }
+
+            if (left.parentElement.contains(end))
+                break;
+
+            left = left.parentElement;
+        }
+
+
+        while (!right.contains(start)) {
+
+            let prev = right.previousSibling;
+
+            while (prev && !prev.contains(start)) {
+                nodes.add(prev);
+                prev = prev.previousSibling;
+            }
+
+            if (right.parentElement.contains(start))
+                break;
+
+            right = right.parentElement;
+        }
+
+        nodes.forEach(item => item.remove());
+
+        switch (true) {
+            case ((left.nodeType === right.nodeType) && (left.nodeType === Node.TEXT_NODE)): {
+
+                if (left === right) {
+                    console.log(101, left, right, range.startOffset, range.endOffset)
+                    left.replaceData(range.startOffset, range.endOffset - range.startOffset, '');
+                    rightOffset = range.startOffset;
+                    // if (!left.length) {
+                    //     const parent = left.parentElement;
+                    //     left = right = parent?.previousElementSibling
+                    //         || parent.nextElementSibling;
+                    //     parent.remove();
+                    // }
+                } else {
+                    console.log(102, left, right, range.startOffset, range.endOffset)
+
+                    left.replaceData(range.startOffset, left.length - range.startOffset, '');
+                    leftOffset = left.length;
+                    right.replaceData(0, range.endOffset, '');
+                    rightOffset = 0;
+                }
+                break;
+            }
+
+            case ((left.nodeType === right.nodeType) && (left.nodeType === Node.ELEMENT_NODE)): {
+                if (left === right) {
+                    // <span.ep>
+                    console.log(201, left, right, range.startOffset, range.endOffset)
+
+                } else {
+                    // <span.sp><span.w>, <span.w><span.w>
+                    console.log(202, left, right, range.startOffset, range.endOffset)
+
+                    left.firstChild.replaceData(range.startOffset, left.firstChild.length - range.startOffset, '');
+                    right.firstChild.replaceData(0, range.endOffset, '');
+                    rightOffset = range.startOffset;
+
+                    // <span.w><span.w>
+                    if (left.className == 'w' && right.className == 'w') {
+                        // left.firstChild.appendData(right.firstChild.data);
+                        // right.remove();
+                        // left = right = left.firstChild;
+                        // break;
+                    }
+
+                    // <span.sp><span.w>
+                    if (left.className == 'w' || right.className == 'w') {
+                        console.log(203)
+                    }
+                }
+                break;
+            }
+            default:
+                console.log(404, left, right, range.startOffset, range.endOffset)
+        }
+
+        super({
+            startContainer: left,
+            startOffset: leftOffset,
+            endContainer: right,
+            endOffset: rightOffset,
+            collapsed:
+                (left === right)
+                && (range.startOffset == range.endOffset)
+        });
+    }
+}
+
+// Range, der die FF-Fehler korrigiert
+class TargetRange extends AlignedRange {
 
     constructor(range) {
 
@@ -117,7 +250,7 @@ class TargetRange extends StaticRange {
             // Sorgt dafür, dass zwischen zwei TEXT_NODES der vorherige
             // ausgewählt wird und offset auf die Länge des TEXT_NODES
             if (range.startOffset == 0 && range.endOffset == 0) {
-                console.debug(1001)
+                // console.debug(1001)
                 startContainer = evaluateXPath(range.startContainer, `
                       (
                         ../preceding-sibling::span/text() | 
@@ -145,7 +278,7 @@ class TargetRange extends StaticRange {
         if (range.startContainer.nodeType === Node.ELEMENT_NODE) {
 
             if ('ep' === range.startContainer.className) {
-                console.debug(1002, range.startContainer)
+                // console.debug(1002, range.startContainer)
 
                 startContainer = evaluateXPath(range.startContainer, `
                     (
@@ -165,7 +298,7 @@ class TargetRange extends StaticRange {
             if (['DIV', 'ARTICLE', 'P'].includes(range.startContainer.nodeName)
                 && (range.startOffset == 0 && range.endOffset >= 1)) {
 
-                console.debug(1003, range.startContainer)
+                // console.debug(1003, range.startContainer)
 
                 startContainer = evaluateXPath(range.startContainer, `
                     (
@@ -187,7 +320,7 @@ class TargetRange extends StaticRange {
             // Passiert im FF, wenn mit der Maus ein Bereich bist zum Textende
             // ausgewählt wird
             if ('ep' === range.endContainer.className) {
-                console.debug(1004, range.endContainer)
+                // console.debug(1004, range.endContainer)
 
                 endContainer = evaluateXPath(range.endContainer, `
                     (
@@ -207,7 +340,7 @@ class TargetRange extends StaticRange {
             if (['DIV', 'ARTICLE', 'P'].includes(range.endContainer.nodeName)
                 && (range.startOffset == 0 && range.endOffset >= 1)) {
 
-                console.debug(1005, range.endContainer)
+                // console.debug(1005, range.endContainer)
 
                 endContainer = evaluateXPath(range.endContainer, `
                       (
@@ -509,11 +642,113 @@ class TypeWriter {
 
     onInsertContent(range, data) {
         console.table([range]);
+        console.table([data]);
 
         if (!range.collapsed) {
 
 
         }
+    }
+
+    onDeleteContent(range) {
+        console.table([range]);
+
+        // Start und Ende sind Textknoten
+        if ((range.startContainer.nodeType === range.endContainer.nodeType)
+            && (range.startContainer.nodeType === Node.TEXT_NODE)) {
+
+            if (range.startContainer === range.endContainer) {
+                console.log(3010)
+                // <span.cm><span.w><span.cm>
+                //          --------
+                // oder text|text ergibt leeren <span.w>
+            } else {
+                console.log(3020)
+
+            }
+
+            return;
+        }
+
+        // Start und Ende sind Elementknoten
+        if ((range.startContainer.nodeType === range.endContainer.nodeType)
+            && (range.startContainer.nodeType === Node.ELEMENT_NODE)) {
+
+            // Start und Ende sind derselbe Knoten
+            if (range.startContainer === range.endContainer) {
+                console.log(3030)
+
+                switch (range.startContainer.className) {
+                    case 'ep':
+                        // wenn Vorgänger, dann <span>
+                        if (range.startContainer.previousElementSibling) {
+                            document
+                                .getSelection()
+                                .collapse(range.startContainer.previousElementSibling,
+                                    range.startContainer.previousElementSibling.firstChild.length
+                                );
+                        } else {
+                            document
+                                .getSelection()
+                                .collapse(range.startContainer, 0);
+                        }
+                        return;
+
+                    default:
+                        console.log(3031, range.startContainer.className)
+
+                }
+
+            } else {    // Start und Ende sind verschiedene Knoten
+                console.log(3040)
+
+                // startContainer ist leer
+                if (range.startContainer.firstChild?.length === 0) {
+                    console.log(3041)
+
+                    if (range.startContainer.previousElementSibling?.className == 'w'
+                        && range.startContainer.nextElementSibling?.className == 'w') {
+                        console.log(3042)
+
+                        mergeContainer(
+                            range.startContainer.previousElementSibling,
+                            range.startContainer.nextElementSibling);
+                    }
+
+                    range.startContainer.remove();
+                }
+
+                // endContainer ist leer
+                if (range.endContainer.firstChild?.length === 0) {
+                    console.log(3045)
+
+                    if (range.endContainer.previousElementSibling?.className == 'w'
+                        && range.endContainer.nextElementSibling?.className == 'w') {
+                        console.log(3046)
+
+                        mergeContainer(
+                            range.endContainer.previousElementSibling,
+                            range.endContainer.nextElementSibling);
+                    } else {
+                        console.log(3047)
+                        if (range.startContainer.firstChild?.length) {
+                            // FIREFOX
+                            document
+                                .getSelection()
+                                .collapse(
+                                    range.startContainer.firstChild,
+                                    range.startContainer.firstChild.length)
+                        }
+                    }
+
+                    range.endContainer.remove();
+                }
+            }
+
+            return;
+        }
+
+        console.log(3050)
     }
 
     handleEvent(event) {
@@ -533,87 +768,17 @@ class TypeWriter {
             return event.data; // kann null sein
         }(event);
 
-        const [left, right] = function (range) {
-
-            let start = range.startContainer,
-                end = range.endContainer,
-                left = start,
-                right = end;
-
-            const nodes = new Set();
-
-            while (!left.contains(end)) {
-
-                let next = left.nextSibling;
-
-                while (next && !next.contains(end)) {
-                    nodes.add(next);
-                    next = next.nextSibling;
-                }
-
-                if (left.parentElement.contains(end))
-                    break;
-
-                left = left.parentElement;
-            }
-
-
-            while (!right.contains(start)) {
-
-                let prev = right.previousSibling;
-
-                while (prev && !prev.contains(start)) {
-                    nodes.add(prev);
-                    prev = prev.previousSibling;
-                }
-
-                if (right.parentElement.contains(start))
-                    break;
-
-                right = right.parentElement;
-            }
-
-            nodes.forEach(item => item.remove());
-
-            switch (true) {
-                case ((left.nodeType === right.nodeType) && (left.nodeType === Node.TEXT_NODE)): {
-                    console.log(101, range.startOffset, range.endOffset)
-                    if (left === right) {
-                        console.log(101, left, right)
-                        left.replaceData(range.startOffset, range.endOffset - range.startOffset, '')
-                    } else {
-                        console.log(102, left, right)
-                    }
-                    break;
-                }
-
-                case ((left.nodeType === right.nodeType) && (left.nodeType === Node.ELEMENT_NODE)): {
-                    if (left === right) {
-                        console.log(201, left, right)
-
-                    } else {
-                        console.log(202, left, right)
-                        //left.replaceData(range.startOffset, left.length - range.startOffset, '')
-                    }
-                    break;
-                }
-                default:
-                    console.log(404, left.nodeType, right.nodeType)
-            }
-            return [left, right]
-        }(range);
-
-        console.log(left, right)
-
-        if (left !== right) {
-
-        }
-        return
+        //console.log(targetrange)
 
         switch (event.inputType) {
             case 'insertText':
             case 'insertFromPaste':
                 return this.onInsertContent(targetrange, data);
+
+            case 'deleteContentBackward':
+            case 'deleteContentForward':
+                return this.onDeleteContent(targetrange);
+
             default:
                 console.log(event.inputType);
         }
