@@ -124,114 +124,64 @@ const mergeContainer = (target, source) => {
 class AlignedRange extends StaticRange {
 
     constructor(range) {
+        console.log('AlignedRange')
+        console.table([range])
 
-        let start = range.startContainer,
-            end = range.endContainer,
-            left = start,
-            right = end,
-            leftOffset = range.startOffset,
-            rightOffset = range.endOffset;
+        if ((range.startContainer === range.endContainer)
+            && ('ep' === range.startContainer.className)) {
 
-        const nodes = new Set();
+            super(range);
 
-        while (!left.contains(end)) {
+        } else {
 
-            let next = left.nextSibling;
+            console.assert(range.startContainer.nodeType === Node.TEXT_NODE);
+            console.assert(range.endContainer.nodeType === Node.TEXT_NODE);
 
-            while (next && !next.contains(end)) {
-                nodes.add(next);
-                next = next.nextSibling;
+            let startContainer = range.startContainer,
+                startOffset = range.startOffset,
+                endContainer = range.endContainer,
+                endOffset = range.endOffset,
+                start = startContainer.parentElement;
+
+
+            while (!start.contains(endContainer)) {
+                start = start.parentElement
             }
 
-            if (left.parentElement.contains(end))
-                break;
+            const iterator = document.createNodeIterator(start);
 
-            left = left.parentElement;
-        }
+            let currentNode, removing = false;
 
+            while ((currentNode = iterator.nextNode())) {
 
-        while (!right.contains(start)) {
-
-            let prev = right.previousSibling;
-
-            while (prev && !prev.contains(start)) {
-                nodes.add(prev);
-                prev = prev.previousSibling;
-            }
-
-            if (right.parentElement.contains(start))
-                break;
-
-            right = right.parentElement;
-        }
-
-        nodes.forEach(item => item.remove());
-
-        switch (true) {
-            case ((left.nodeType === right.nodeType) && (left.nodeType === Node.TEXT_NODE)): {
-
-                if (left === right) {
-                    console.log(101, left, right, range.startOffset, range.endOffset)
-                    left.replaceData(range.startOffset, range.endOffset - range.startOffset, '');
-                    rightOffset = range.startOffset;
-                    // if (!left.length) {
-                    //     const parent = left.parentElement;
-                    //     left = right = parent?.previousElementSibling
-                    //         || parent.nextElementSibling;
-                    //     parent.remove();
-                    // }
-                } else {
-                    console.log(102, left, right, range.startOffset, range.endOffset)
-
-                    left.replaceData(range.startOffset, left.length - range.startOffset, '');
-                    leftOffset = left.length;
-                    right.replaceData(0, range.endOffset, '');
-                    rightOffset = 0;
+                if (removing && (!currentNode.contains(endContainer))) {
+                    currentNode.remove()
                 }
-                break;
-            }
 
-            case ((left.nodeType === right.nodeType) && (left.nodeType === Node.ELEMENT_NODE)): {
-                if (left === right) {
-                    // <span.ep>
-                    console.log(201, left, right, range.startOffset, range.endOffset)
-
-                } else {
-                    // <span.sp><span.w>, <span.w><span.w>
-                    console.log(202, left, right, range.startOffset, range.endOffset)
-
-                    left.firstChild.replaceData(range.startOffset, left.firstChild.length - range.startOffset, '');
-                    right.firstChild.replaceData(0, range.endOffset, '');
-                    rightOffset = range.startOffset;
-
-                    // <span.w><span.w>
-                    if (left.className == 'w' && right.className == 'w') {
-                        // left.firstChild.appendData(right.firstChild.data);
-                        // right.remove();
-                        // left = right = left.firstChild;
-                        // break;
-                    }
-
-                    // <span.sp><span.w>
-                    if (left.className == 'w' || right.className == 'w') {
-                        console.log(203)
-                    }
+                if ((currentNode === startContainer) && (startContainer === endContainer)) {
+                    startContainer.deleteData(startOffset, endOffset - startOffset)
+                    break;
                 }
-                break;
-            }
-            default:
-                console.log(404, left, right, range.startOffset, range.endOffset)
-        }
 
-        super({
-            startContainer: left,
-            startOffset: leftOffset,
-            endContainer: right,
-            endOffset: rightOffset,
-            collapsed:
-                (left === right)
-                && (range.startOffset == range.endOffset)
-        });
+                if (currentNode === startContainer) {
+                    startContainer.deleteData(startOffset, startContainer.length - startOffset);
+                    removing = true;
+                }
+
+                if (currentNode === endContainer) {
+                    endContainer.deleteData(0, endOffset)
+                    break;
+                }
+            }
+            
+            super({
+                startContainer: startContainer,
+                startOffset: startOffset,
+                endContainer: endContainer,
+                endOffset: endOffset
+            });
+
+        }
     }
 }
 
@@ -239,119 +189,136 @@ class AlignedRange extends StaticRange {
 class TargetRange extends AlignedRange {
 
     constructor(range) {
-
+        console.log('TargetRange')
         let startContainer = range.startContainer,
             startOffset = range.startOffset,
             endContainer = range.endContainer,
             endOffset = range.endOffset;
 
-        if (range.startContainer.nodeType === Node.TEXT_NODE) {
+        if (startContainer.nodeType === Node.TEXT_NODE) {
 
-            // Sorgt dafür, dass zwischen zwei TEXT_NODES der vorherige
-            // ausgewählt wird und offset auf die Länge des TEXT_NODES
-            if (range.startOffset == 0 && range.endOffset == 0) {
-                // console.debug(1001)
-                startContainer = evaluateXPath(range.startContainer, `
-                      (
-                        ../preceding-sibling::span/text() | 
-                        ./preceding-sibling::span/text() |
-                        ../preceding-sibling::text() |
-                        ./preceding-sibling::text() 
-                      )[last()]
-                    `
-                ) || startContainer;
+            if ((startOffset === startContainer.length) && (startContainer !== endContainer)) {
 
-                if (startContainer !== range.startContainer) {
-                    startOffset = startContainer.data.length;
+                switch (true) {
+                    case (!!startContainer.nextSibling?.data):
+                        console.log(0.1, 'never?')
+                        break;
+
+                    case (!!startContainer.nextSibling?.firstChild?.data):
+                        console.log(0.2)
+                        startContainer = startContainer.nextSibling.firstChild;
+                        startOffset = 0;
+                        break;
+
+                    case (!!startContainer.parentElement.nextSibling?.data):
+                        console.log(0.3)
+                        startContainer = startContainer.parentElement.nextSibling;
+                        startOffset = 0;
+                        break;
+
+                    case (!!startContainer.parentElement.nextSibling?.firstChild?.data):
+                        console.log(0.4)
+                        startContainer = startContainer.parentElement.nextSibling.firstChild;
+                        startOffset = 0;
+                        break;
+
+                    default:
+                        console.log(0.5, 'unknown')
                 }
 
-                if (range.collapsed) {
-                    endContainer = startContainer;
-                    endOffset = startOffset;
+            } else {
+                console.log(0, 'ok')
+            }
+        } else {
+
+            if ('ep' === startContainer.className) {
+                console.log(1.1)
+                if (startContainer.previousElementSibling?.lastChild) {
+                    console.log(1.2)
+                    startContainer = startContainer.previousElementSibling.lastChild;
+                    startOffset = startContainer.length;
                 }
+
+            } else {
+                console.log(1.3)
+
+                let node = startContainer.firstElementChild;
+
+                while (node && node.localName !== 'span') {
+                    node = node.firstElementChild;
+                }
+
+                // <span.ep>?
+                startContainer = node.firstChild.data
+                    ? node.firstChild
+                    : node;
+                startOffset = 0;
             }
         }
 
-        // Passiert im FF u.a. wenn mit Strg+A der gesamte Textbereich
-        // ausgewählt wird: Dann ist StartContainer kein TEXT_NODE,
-        // sondern ein Block-Element
-        if (range.startContainer.nodeType === Node.ELEMENT_NODE) {
+        if (endContainer.nodeType === Node.TEXT_NODE) {
 
-            if ('ep' === range.startContainer.className) {
-                // console.debug(1002, range.startContainer)
+            if ((endOffset === 0) && (startContainer !== endContainer)) {
 
-                startContainer = evaluateXPath(range.startContainer, `
-                    (
-                        ./preceding-sibling::span/text()
-                    )[last()]
-                    `
-                ) || range.startContainer;
+                switch (true) {
+                    case (!!endContainer.previousSibling?.data):
+                        console.debug(3.1, 'never')
+                        break;
 
-                // Wenn ein TEXT_NODE gefunden wurde, Offset ist das letzte Zeichen,
-                // ansonsten 0, <span.ep>
-                startOffset = startContainer?.data?.length || 0;
+                    case (!!endContainer.previousSibling?.firstChild.data):
+                        console.debug(3.2)
+                        endContainer = endContainer.previousSibling.firstChild;
+                        endOffset = endContainer.length;
+                        break;
+
+                    case (!!endContainer.parentElement.previousSibling?.data):
+                        console.debug(3.3)
+                        endContainer = endContainer.parentElement.previousSibling;
+                        endOffset = endContainer.length;
+                        break;
+
+                    case (!!endContainer.parentElement.previousSibling?.firstChild.data):
+                        console.debug(3.4)
+                        endContainer = endContainer.parentElement.previousSibling.firstChild;
+                        endOffset = endContainer.length;
+                        break;
+
+                    default:
+                        console.log(3.5, 'unknown')
+                }
+            } else {
+                console.log(4, 'OK')
             }
 
-            // Wenn der StartContainer ein Block-Element ist, dann den ersten
-            // TEXT_NODE oder <span.ep> im Element finden
+        } else {
 
-            if (['DIV', 'ARTICLE', 'P'].includes(range.startContainer.nodeName)
-                && (range.startOffset == 0 && range.endOffset >= 1)) {
+            let node = ('ep' !== endContainer.className)
+                ? endContainer.lastElementChild
+                : endContainer;
 
-                // console.debug(1003, range.startContainer)
-
-                startContainer = evaluateXPath(range.startContainer, `
-                    (
-                        .//span/text() |
-                        .//span[@class='ep']
-                    )[1]
-                    `
-                );
-
-                // startOffset bleibt 0
-            }
-        }
-
-        // Passiert im FF u.a. wenn mit Strg+A der gesamte Textbereich
-        // ausgewählt wird: Dann ist EndContainer kein TEXT_NODE,
-        // sondern ein Block-Element
-        if (range.endContainer.nodeType === Node.ELEMENT_NODE) {
-
-            // Passiert im FF, wenn mit der Maus ein Bereich bist zum Textende
-            // ausgewählt wird
-            if ('ep' === range.endContainer.className) {
-                // console.debug(1004, range.endContainer)
-
-                endContainer = evaluateXPath(range.endContainer, `
-                    (
-                        ./preceding-sibling::span/text()
-                    )[last()]
-                    `
-                ) || range.endContainer;
-
-                // Wenn ein TEXT_NODE gefunden wurde, Offset ist das letzte Zeichen,
-                // ansonsten 0, <span.ep>
-                endOffset = endContainer?.data?.length || 0;
-
+            while (node && node.localName !== 'span') {
+                node = node.lastElementChild;
             }
 
-            // Wenn der Endcontainer ein Block-Element ist, dann den letzten
-            // TEXT_NODE oder <span.ep> im Element finden
-            if (['DIV', 'ARTICLE', 'P'].includes(range.endContainer.nodeName)
-                && (range.startOffset == 0 && range.endOffset >= 1)) {
+            endContainer = node;
 
-                // console.debug(1005, range.endContainer)
+            console.assert('ep' == endContainer.className, 'not: <span.ep>');
 
-                endContainer = evaluateXPath(range.endContainer, `
-                      (
-                        .//span[@class='ep'][not(preceding-sibling::span)] |
-                        .//span/text()
-                    )[last()]
-                `);
+            switch (true) {
+                case (!!endContainer.previousElementSibling?.lastChild?.firstChild?.data):
+                    console.log(5.1)
+                    endContainer = endContainer.previousElementSibling.lastChild.firstChild;
+                    endOffset = endContainer.length;
+                    break
 
-                // Wenn ein TEXT_NODE gefunden wurde, Offset ist das letzte Zeichen,
-                // ansonsten 0, (<span.ep>)
-                endOffset = endContainer?.data?.length || 0;
+                case (!!endContainer.previousElementSibling?.lastChild?.data):
+                    console.log(5.2)
+                    endContainer = endContainer.previousElementSibling.lastChild;
+                    endOffset = endContainer.length;
+                    break
+
+                default:
+                    console.log(5.3, 'OK')
             }
         }
 
@@ -365,11 +332,8 @@ class TargetRange extends AlignedRange {
             startOffset: startOffset,
             endContainer: endContainer,
             endOffset: endOffset,
-            collapsed:
-                (startContainer === endContainer)
-                && (startOffset == endOffset)
+            collapsed: range.collapsed
         });
-
     }
 }
 
@@ -652,7 +616,7 @@ class TypeWriter {
 
     onDeleteContent(range) {
         console.table([range]);
-
+        return
         // Start und Ende sind Textknoten
         if ((range.startContainer.nodeType === range.endContainer.nodeType)
             && (range.startContainer.nodeType === Node.TEXT_NODE)) {
@@ -662,6 +626,18 @@ class TypeWriter {
                 // <span.cm><span.w><span.cm>
                 //          --------
                 // oder text|text ergibt leeren <span.w>
+                if (range.startContainer.parentElement.previousElementSibling) {
+                    document
+                        .getSelection()
+                        .collapse(range.startContainer.parentElement.previousElementSibling.firstChild,
+                            range.startContainer.parentElement.previousElementSibling.firstChild.length
+                        );
+                } else {
+                    document
+                        .getSelection()
+                        .collapse(range.startContainer.parentElement.nextElementSibling.firstChild);
+                }
+                range.startContainer.parentElement.remove();
             } else {
                 console.log(3020)
 
@@ -700,7 +676,7 @@ class TypeWriter {
                 }
 
             } else {    // Start und Ende sind verschiedene Knoten
-                console.log(3040)
+                console.log(3040, range.startContainer, range.endContainer)
 
                 // startContainer ist leer
                 if (range.startContainer.firstChild?.length === 0) {
@@ -743,6 +719,16 @@ class TypeWriter {
 
                     range.endContainer.remove();
                 }
+
+                if (range.startContainer.firstChild?.length) {
+                    // FIREFOX
+                    console.log(3048)
+                    document
+                        .getSelection()
+                        .collapse(
+                            range.startContainer.firstChild,
+                            range.startContainer.firstChild.length)
+                }
             }
 
             return;
@@ -767,8 +753,6 @@ class TypeWriter {
 
             return event.data; // kann null sein
         }(event);
-
-        //console.log(targetrange)
 
         switch (event.inputType) {
             case 'insertText':
