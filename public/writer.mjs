@@ -145,7 +145,7 @@ class AlignedRange extends StaticRange {
 
 
             while (!start.contains(endContainer)) {
-                start = start.parentElement
+                start = start.parentElement;
             }
 
             const iterator = document.createNodeIterator(start);
@@ -155,11 +155,12 @@ class AlignedRange extends StaticRange {
             while ((currentNode = iterator.nextNode())) {
 
                 if (removing && (!currentNode.contains(endContainer))) {
-                    currentNode.remove()
+                    currentNode.remove();
                 }
 
                 if ((currentNode === startContainer) && (startContainer === endContainer)) {
-                    startContainer.deleteData(startOffset, endOffset - startOffset)
+                    startContainer.deleteData(startOffset, endOffset - startOffset);
+                    endOffset = startOffset;
                     break;
                 }
 
@@ -173,7 +174,7 @@ class AlignedRange extends StaticRange {
                     break;
                 }
             }
-            
+
             super({
                 startContainer: startContainer,
                 startOffset: startOffset,
@@ -197,6 +198,7 @@ class TargetRange extends AlignedRange {
 
         if (startContainer.nodeType === Node.TEXT_NODE) {
 
+            // FF nimmt den Vorgänger-Knoten und setzt Offset auf seine Textlänge
             if ((startOffset === startContainer.length) && (startContainer !== endContainer)) {
 
                 switch (true) {
@@ -249,7 +251,7 @@ class TargetRange extends AlignedRange {
                 }
 
                 // <span.ep>?
-                startContainer = node.firstChild.data
+                startContainer = node.firstChild
                     ? node.firstChild
                     : node;
                 startOffset = 0;
@@ -615,6 +617,122 @@ class TypeWriter {
     }
 
     onDeleteContent(range) {
+        console.log('onDeleteContent');
+        console.table([range]);
+
+        let startContainer = range.startContainer,
+            startOffset = range.startOffset,
+            endContainer = range.endContainer,
+            endOffset = range.endOffset;
+
+        if (startContainer === endContainer) {
+
+            if (startContainer.nodeType === Node.TEXT_NODE) {
+
+                if (startContainer.length) {
+                    console.log(30.1, 'OK')
+
+                } else {
+                    console.log(30.2)
+
+                    switch (true) {
+
+                        case (!!startContainer.previousSibling):
+
+                            if (startContainer.previousSibling.length) { // Kann nur #text sein
+                                console.log(30.211, 'never')
+                                startContainer = startContainer.previousSibling
+                            } else { // Kann nur <span style> sein
+                                console.log(30.212)
+                                startContainer = startContainer.previousSibling.firstChild;
+                            }
+
+                            startOffset = startContainer.length;
+                            range.startContainer.remove();
+
+                            break;
+
+                        case (!!startContainer.nextSibling):
+
+                            if (startContainer.nextSibling.length) {
+                                console.log(30.221)
+                                startContainer = startContainer.nextSibling;
+                            } else {
+                                console.log(30.222)
+                                startContainer = startContainer.nextSibling.firstChild;
+                            }
+
+                            startOffset = 0;
+                            range.startContainer.remove();
+
+                            break;
+
+                        case (!!startContainer.parentElement.previousSibling):
+
+                            if (startContainer.parentElement.previousSibling.length) {
+                                console.log(30.231);
+                                startContainer = startContainer.parentElement.previousSibling;
+                            } else {
+                                console.log(30.232);
+                                startContainer = startContainer.parentElement.previousSibling.firstChild;
+                            }
+
+                            startOffset = startContainer.length;
+                            range.startContainer.parentElement.remove();
+
+                            break;
+
+                        case (!!startContainer.parentElement.nextSibling):
+
+                            if (!!startContainer.parentElement.nextSibling.length) {
+                                console.log(30.241)
+                                startContainer = startContainer.parentElement.nextSibling;
+                            } else {
+                                if ('ep' == startContainer.parentElement.nextSibling.className) {
+                                    console.log(30.2421)
+                                    startContainer = startContainer.parentElement.nextSibling;
+                                } else {
+                                    console.log(30.2422, startContainer)
+                                    startContainer = startContainer.parentElement.nextSibling.firstChild;
+                                }
+                            }
+
+                            range.startContainer.parentElement.remove();
+                            startOffset = 0;
+                            break;
+
+                        default:
+                            console.log(30.29)
+                    }
+                }
+            } else {
+                console.log(30.8)
+
+            }
+
+        } else {
+            switch (true) {
+                case ((startContainer.nodeType === endContainer.nodeType)
+                    && (startContainer.nodeType === Node.TEXT_NODE)):
+                    console.log(30.91);
+                    break
+
+                case ((startContainer.nodeType === endContainer.nodeType)
+                    && (startContainer.nodeType === Node.ELEMENT_NODE)):
+                    console.log(30.92);
+                    break
+
+                default:
+                    console.log(30.99);
+            }
+        }
+        document
+            .getSelection()
+            .collapse(startContainer, startOffset);
+        startContainer.parentElement.normalize()
+    }
+
+    onDeleteContent1(range) {
         console.table([range]);
         return
         // Start und Ende sind Textknoten
