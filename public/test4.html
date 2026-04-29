@@ -41,8 +41,11 @@
             background-color: #eee;
         }
 
-        span {
-            /* white-space: pre; */
+        span:empty {
+            background-color: red;
+            display: inline-block;
+            height: 1em;
+            width: 1em;
         }
 
         span.ep {
@@ -60,7 +63,7 @@
 </head>
 
 <body>
-    <div><article><p><span class="ep"><br></span></p></article></div>
+    <div><article><p><span class="w"></span><span class="ep"><br></span></p></article></div>
     <hr>
     <div><article><p><span class="w">aaa</span><span class="ep"><br></span></p></article></div>
     <hr>

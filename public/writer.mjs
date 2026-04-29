@@ -1,4 +1,5 @@
 
+
 const evaluateXPath = (node, xpath) => document.evaluate(
     xpath,
     node,
@@ -76,6 +77,35 @@ const regex = new RegExp(/([^\u00C0-\u1FFF\u2C00-\uD7FF\w])/vi);
 
 const tokenize = (string) => string.split(regex).filter(token => token.length);
 
+const isWord = (str) => (!!str.length && regex.test(str));
+
+// are one or more <element> block elements and 
+// has every <element> the same nodeName
+const areBlockElement = (...nodes) => nodes.every(
+    (node, idx, arr) => (
+        ['P'].includes(node.nodeName)
+        && arr[0].nodeName === node.nodeName
+    )
+);
+
+const areElementNode = (...nodes) => nodes.every(
+    (node, idx, arr) => (
+        node.nodeType === Node.ELEMENT_NODE
+    )
+);
+
+const areTextNode = (...nodes) => nodes.every(
+    (node, idx, arr) => (
+        node.nodeType === Node.TEXT_NODE
+    )
+);
+
+const areStyleNode = (...nodes) => nodes.every(
+    (node, idx, arr) => (
+        node.hasAttribute('style')
+    )
+);
+
 function parse(string) {
 
     const nodes = [];
@@ -129,11 +159,12 @@ class AlignedRange extends StaticRange {
 
         if ((range.startContainer === range.endContainer)
             && ('ep' === range.startContainer.className)) {
+            console.log(100.1, 'OK');
 
             super(range);
 
         } else {
-
+            console.log(100.2);
             console.assert(range.startContainer.nodeType === Node.TEXT_NODE);
             console.assert(range.endContainer.nodeType === Node.TEXT_NODE);
 
@@ -159,6 +190,7 @@ class AlignedRange extends StaticRange {
                 }
 
                 if ((currentNode === startContainer) && (startContainer === endContainer)) {
+                    console.log(100.21);
                     startContainer.deleteData(startOffset, endOffset - startOffset);
                     endOffset = startOffset;
                     break;
@@ -170,7 +202,26 @@ class AlignedRange extends StaticRange {
                 }
 
                 if (currentNode === endContainer) {
+                    console.log(100.22);
                     endContainer.deleteData(0, endOffset)
+                    break;
+                }
+            }
+
+            // walk iterator back to find and join block-elements
+            while ((currentNode = iterator.previousNode())) {
+
+                if (currentNode === start)
+                    break
+
+                if (currentNode.previousSibling
+                    && areBlockElement(currentNode.previousSibling, currentNode)) {
+                    console.log(100.23);
+
+                    currentNode.previousSibling
+                        .append(...currentNode.childNodes);
+
+                    currentNode.remove();
                     break;
                 }
             }
@@ -346,266 +397,6 @@ class TypeWriter {
         node.addEventListener('beforeinput', this);
     }
 
-    onInsertContent1(startNode, endNode, startOffset, endOffset, data) {
-        console.debug('onInsertContent', {
-            startNode: startNode,
-            startOffset: startOffset,
-            endNode: endNode,
-            endOffset: endOffset,
-            equal: startNode === endNode,
-            data: data
-        });
-
-        const selection = document.getSelection();
-        console.debug(selection.anchorNode)
-
-        const pre = startNode.innerText.slice(0, startOffset)
-        const post = endNode.innerText.slice(endOffset)
-
-        if (startNode === endNode) {
-            if ('ep' === startNode.className) {
-                console.debug('ep');
-
-                const span = createSpan(data);
-                startNode
-                    .before(span);
-                document
-                    .getSelection()
-                    .collapse(span.firstChild, startOffset + data.length);
-                return;
-            }
-
-            if ('w' === startNode.className) {
-                console.debug('WORD');
-
-                const span = createSpan(data);
-
-                return;
-            }
-
-            if (['sp', 'br', 'cm'].includes(startNode.className)) {
-                console.debug('SIGNS');
-                const span = createSpan(data);
-
-
-                return;
-            }
-
-            throw new Error(`unknown className: ${startNode.className}`)
-        }
-    }
-
-    onInsertContent2(range, data) {
-        console.table([range]);
-
-        const content = parse(data);
-        let tokens = tokenize(data);
-
-        if (range.collapsed) {
-
-            // leeres <p>, container ist <span.ep>
-            if (range.startContainer.nodeType === Node.ELEMENT_NODE) {
-                console.debug(1001)
-
-                const nodes = tokens.map(token => {
-                    const span = document.createElement('span');
-                    span.appendChild(new Text(token));
-
-                    if (regex.test(token)) {
-                        span.className = findClassName(token);
-                    } else {
-                        span.className = 'w';
-                    }
-                    try {
-                        document
-                            .getSelection()
-                            .collapse(span, token.length);
-                    } catch (ex) { console.error(ex) }
-                    return span;
-                });
-
-                range.startContainer.before(...nodes);
-
-                return;
-            }
-
-
-            if (range.startContainer.nodeType === Node.TEXT_NODE) {
-                console.debug(1002)
-
-                tokens.unshift(range.startContainer.data.slice(0, range.startOffset));
-                tokens.push(range.startContainer.data.slice(range.startOffset));
-
-                const nodes = [];
-
-                tokens = tokens.filter(token => token.length);
-
-                for (let n = 0; n < tokens.length; n++) {
-                    const span = document.createElement('span');
-
-                    if (!regex.test(tokens[n])) {
-
-                        if ((n < tokens.length - 1) && !regex.test(tokens[n + 1])) {
-                            span.appendChild(new Text(tokens[n] + tokens[n + 1]));
-                            n++;
-                        } else {
-                            span.appendChild(new Text(tokens[n]));
-                        }
-                        span.className = 'w';
-                    } else {
-                        span.appendChild(new Text(tokens[n]));
-                        span.className = findClassName(tokens[n]);
-                    }
-
-                    nodes.push(span)
-                }
-                //const nodes = tokens.map((token, idx, arr) => {
-
-                //     if ((!regex.test(prev)) && (!regex.test(cur))) {
-                //         return prev + cur
-                //     } else {
-                //         return cur
-                //     }
-                // })
-                console.log(tokens, nodes)
-                range.startContainer.parentElement.replaceWith(...nodes);
-                return;
-            }
-        } else {
-            console.debug(2000)
-
-        }
-        return
-        console.debug(tokens);
-
-        if (range.startContainer.nodeType === Node.ELEMENT_NODE
-            && range.endContainer.nodeType === Node.ELEMENT_NODE) {
-            console.debug(1000)
-
-            // leeres <p>, container ist <span.ep>
-            if (range.startContainer === range.endContainer) {
-                console.debug(1001)
-
-                const nodes = tokens.map(token => {
-                    const span = document.createElement('span');
-                    span.appendChild(new Text(token));
-
-                    if (regex.test(token)) {
-                        span.className = findClassName(token);
-                    } else {
-                        span.className = 'w';
-                    }
-
-                    document
-                        .getSelection()
-                        .collapse(span, token.length);
-                    return span;
-                });
-
-                range.startContainer.before(...nodes);
-            } else {
-                console.debug(1002)
-            }
-        }
-
-        if (range.startContainer.nodeType === Node.TEXT_NODE
-            && range.endContainer.nodeType === Node.TEXT_NODE) {
-
-            if (range.startContainer === range.endContainer) {
-
-                if (range.startContainer.parentElement.style.length) {
-                    console.debug(2000)
-
-                } else {
-                    console.debug(2010)
-
-                    if (regex.test(token)) {
-
-                    } else {
-                        const text1 = range.startContainer;
-                        const text2 = text1.splitText(range.startOffset);
-                        const text3 = new Text(token)
-                    }
-                }
-            } else {
-                console.debug(3000)
-
-            }
-            /*
-            if (range.startContainer === range.endContainer) {
-
-                const text1 = range.startContainer;
-                const text2 = text1.splitText(range.startOffset);
-                const parent = range.startContainer.parentElement;
-                const pre = content.shift();
-
-                if (parent.className == 'w' && pre.className == 'w') {
-                    console.debug(2010)
-                    text1.after(pre.firstChild, text2);
-
-                    document
-                        .getSelection()
-                        .collapse(text2);
-
-                    parent.normalize();
-
-                    return;
-                }
-
-                if (parent.className == 'w') {
-                    console.debug(2011)
-
-                    if (text2.data) {
-                        console.debug(2012)
-                        const span = document.createElement('span');
-                        // verschiebt text2 von parent nach span:
-                        span.appendChild(text2);
-                        span.className = 'w';
-                        parent.after(pre, span);
-
-                        document
-                            .getSelection()
-                            .collapse(text2);
-                    } else {
-                        console.debug(2013)
-                        parent.after(pre);
-
-                        document
-                            .getSelection()
-                            .collapse(pre, 1);
-                    }
-                    return;
-
-                }
-
-                if (parent.className != 'w') {
-                    console.debug(2014)
-
-                    if (pre.className == 'w' && (parent.nextElementSibling && parent.nextElementSibling.className == 'w')) {
-                        console.debug(2015)
-                        parent.nextElementSibling.appendChild(pre.firstChild)
-
-                        document
-                            .getSelection()
-                            .collapse(pre, 1);
-                        parent.nextElementSibling.normalize();
-                    } else {
-                        console.debug(2016)
-                        parent.after(pre);
-
-                        document
-                            .getSelection()
-                            .collapse(pre, 1);
-                    }
-                }
-            } else {
-                console.debug(3000)
-            }
-                */
-        }
-    }
-
-
     onInsertContent(range, data) {
         console.table([range]);
         console.table([data]);
@@ -627,7 +418,7 @@ class TypeWriter {
 
         if (startContainer === endContainer) {
 
-            if (startContainer.nodeType === Node.TEXT_NODE) {
+            if (areTextNode(startContainer)) {
 
                 if (startContainer.length) {
                     console.log(30.1, 'OK')
@@ -635,224 +426,297 @@ class TypeWriter {
                 } else {
                     console.log(30.2)
 
-                    switch (true) {
+                    if (areStyleNode(startContainer.parentElement)) {
 
-                        case (!!startContainer.previousSibling):
+                        const parent = startContainer.parentElement;
 
-                            if (startContainer.previousSibling.length) { // Kann nur #text sein
-                                console.log(30.211, 'never')
-                                startContainer = startContainer.previousSibling
-                            } else { // Kann nur <span style> sein
-                                console.log(30.212)
-                                startContainer = startContainer.previousSibling.firstChild;
-                            }
+                        switch (true) {
 
-                            startOffset = startContainer.length;
-                            range.startContainer.remove();
+                            case (!!parent.previousSibling):
+                                if (areTextNode(parent.previousSibling)) {
+                                    console.log(30.21);
+                                    startContainer = parent.previousSibling;
 
-                            break;
-
-                        case (!!startContainer.nextSibling):
-
-                            if (startContainer.nextSibling.length) {
-                                console.log(30.221)
-                                startContainer = startContainer.nextSibling;
-                            } else {
-                                console.log(30.222)
-                                startContainer = startContainer.nextSibling.firstChild;
-                            }
-
-                            startOffset = 0;
-                            range.startContainer.remove();
-
-                            break;
-
-                        case (!!startContainer.parentElement.previousSibling):
-
-                            if (startContainer.parentElement.previousSibling.length) {
-                                console.log(30.231);
-                                startContainer = startContainer.parentElement.previousSibling;
-                            } else {
-                                console.log(30.232);
-                                startContainer = startContainer.parentElement.previousSibling.firstChild;
-                            }
-
-                            startOffset = startContainer.length;
-                            range.startContainer.parentElement.remove();
-
-                            break;
-
-                        case (!!startContainer.parentElement.nextSibling):
-
-                            if (!!startContainer.parentElement.nextSibling.length) {
-                                console.log(30.241)
-                                startContainer = startContainer.parentElement.nextSibling;
-                            } else {
-                                if ('ep' == startContainer.parentElement.nextSibling.className) {
-                                    console.log(30.2421)
-                                    startContainer = startContainer.parentElement.nextSibling;
                                 } else {
-                                    console.log(30.2422, startContainer)
-                                    startContainer = startContainer.parentElement.nextSibling.firstChild;
+                                    console.log(30.22);
+                                    startContainer = parent.previousSibling.firstChild;
                                 }
-                            }
+                                break;
 
-                            range.startContainer.parentElement.remove();
-                            startOffset = 0;
-                            break;
+                            case (!!parent.nextSibling):
+                                if (areTextNode(parent.nextSibling)) {
+                                    console.log(30.23, parent.nextSibling);
+                                    startContainer = parent.nextSibling;
 
-                        default:
-                            console.log(30.29)
+                                } else {
+                                    console.log(30.24);
+                                    startContainer = parent.nextSibling.firstChild;
+                                }
+                                break;
+
+                            default:
+                                console.log(30.29);
+                                // ein <span style> ohne Vor- und Nachfahren ist alleine im <span>
+                                // Dieser <span> kann dann auch weg
+                                parent.parentNode.remove();
+                                return;
+                        }
+
+                        parent.remove();
+                        startOffset = startContainer.length;
+                        startContainer.parentElement.normalize();
+
+                    } else { // kein <span style>
+
+                        switch (true) {
+                            case (!!startContainer.previousSibling):
+
+                                if (areTextNode(startContainer.previousSibling)) {
+                                    console.log(30.31, 'never')
+                                    startContainer = startContainer.previousSibling
+                                } else { // Kann nur <span style> sein
+                                    console.log(30.32)
+                                    startContainer = startContainer.previousSibling.firstChild;
+                                }
+
+                                startOffset = startContainer.length;
+                                range.startContainer.remove();
+
+                                break;
+
+                            case (!!startContainer.nextSibling):
+
+                                if (areTextNode(startContainer.nextSibling)) {
+                                    console.log(30.41)
+                                    startContainer = startContainer.nextSibling;
+                                } else {
+                                    console.log(30.42)
+                                    startContainer = startContainer.nextSibling.firstChild;
+                                }
+
+                                startOffset = 0;
+                                range.startContainer.remove();
+
+                                break;
+
+                            default:
+                                console.log(30.9)
+                                // ein leerer startContainer ohne Vor- und Nachfahren
+                                // ist in einem leeren <span>; dieser kann weg
+                                startContainer.parentElement.remove();
+                        }
+
                     }
                 }
-            } else {
+            } else { // ELEMENT_NODE
                 console.log(30.8)
 
             }
-
+            // END if (startContainer === endContainer)
         } else {
-            switch (true) {
-                case ((startContainer.nodeType === endContainer.nodeType)
-                    && (startContainer.nodeType === Node.TEXT_NODE)):
-                    console.log(30.91);
-                    break
 
-                case ((startContainer.nodeType === endContainer.nodeType)
-                    && (startContainer.nodeType === Node.ELEMENT_NODE)):
-                    console.log(30.92);
+            switch (true) {
+                case areTextNode(startContainer, endContainer):
+
+                    if (isWord(startContainer) && isWord(endContainer)) {
+                        console.log(29.2)
+
+                        if (!startContainer.parentElement.contains(endContainer)) {
+
+                            switch (true) {
+                                case areStyleNode(startContainer.parentElement, endContainer.parentElement):
+                                    console.log(30.9111, 'OK')
+                                    break;
+
+                                case areStyleNode(startContainer.parentElement):
+                                    console.log(30.9112, 'OK')
+                                    break;
+
+                                case areStyleNode(endContainer.parentElement):
+                                    console.log(30.9113, 'never')
+                                    break;
+
+                                default:
+                                    console.log(30.9119)
+                                    startContainer.after(endContainer.cloneNode());
+                                    endContainer.parentElement.remove();
+                            }
+                        }
+
+                        break;
+                    }
+
+                    if (!startContainer.length) {
+
+                        if (areStyleNode(startContainer.parentElement)) {
+
+                            const parent = startContainer.parentElement;
+
+                            switch (true) {
+                                case (!!parent.previousNode):
+                                    if (areStyleNode(parent.previousNode)) {
+                                        console.log(40.1);
+
+                                    } else {
+                                        console.log(40.2);
+
+                                    }
+                                    break;
+
+                                case (!!parent.nextNode):
+                                    if (areStyleNode(parent.nextNode)) {
+                                        console.log(40.3);
+
+                                    } else {
+                                        console.log(40.4);
+
+                                    }
+                                    break;
+
+                                default:
+                                    console.log(40.9)
+                                    // ein <span style> ohne Vor- und Nachfahren ist alleine im <span>
+                                    // Dieser <span> kann dann auch weg
+                                    if (!parent.parentElement.contains(endContainer)) {
+                                        console.log(40.91)
+                                        parent.parentElement.remove()
+                                    } else {
+                                        console.log(40.92)
+                                        parent.remove()
+                                    }
+                            }
+                        } else {
+
+                            switch (true) {
+                                case (!!startContainer.previousNode):
+
+                                    if (areStyleNode(startContainer.previousNode)) {
+                                        console.log(41.1);
+                                        startContainer = startContainer.previousNode.firstChild;
+                                    } else {
+                                        console.log(41.2);
+                                        startContainer = startContainer.previousNode;
+                                    }
+                                    break;
+
+                                case (!!startContainer.nextNode):
+
+                                    if (areStyleNode(startContainer.nextNode)) {
+                                        console.log(41.3)
+                                        startContainer = startContainer.nextNode.firstChild;
+                                    } else {
+                                        console.log(41.4)
+                                        startContainer = startContainer.nextNode;
+                                    }
+                                    break;
+
+                                default:
+
+                                    if (!startContainer.parentElement.contains(endContainer)) {
+                                        console.log(41.91)
+                                        startContainer.parentElement.remove()
+                                    } else {
+                                        console.log(41.92)
+                                        startContainer.remove()
+                                    }
+                            }
+                        }
+                    }
+
+                    console.log(50.1, endContainer.length);
+                    if (!endContainer.length) {
+
+                        if (areStyleNode(endContainer.parentElement)) {
+
+                            const parent = endContainer.parentElement;
+
+                            switch (true) {
+                                case (!!parent.previousNode):
+                                    if (areStyleNode(parent.previousNode)) {
+                                        console.log(42.1);
+
+                                    } else {
+                                        console.log(42.2);
+
+                                    }
+                                    break;
+
+                                case (!!parent.nextNode):
+                                    if (areStyleNode(parent.nextNode)) {
+                                        console.log(42.3);
+
+                                    } else {
+                                        console.log(42.4);
+
+                                    }
+                                    break;
+
+                                default:
+                                    // ein <span style> ohne Vor- und Nachfahren ist alleine im <span>
+                                    // Dieser <span> kann dann auch weg
+                                    console.log(42.91)
+                                    const grandpa = parent.parentElement;
+                                    parent.remove();
+
+                                    if (!grandpa.childNodes.length) {
+                                        console.log(42.92)
+                                        grandpa.remove()
+                                    } else console.log(42.92, grandpa.childNodes);
+                            }
+                        } else {
+                            switch (true) {
+                                case (!!endContainer.previousNode):
+
+                                    if (areStyleNode(endContainer.previousNode)) {
+                                        console.log(43.1);
+                                        endContainer = endContainer.previousNode.firstChild;
+                                    } else {
+                                        console.log(43.2);
+                                        endContainer = endContainer.previousNode;
+                                    }
+                                    break;
+
+                                case (!!endContainer.nextNode):
+
+                                    if (areStyleNode(endContainer.nextNode)) {
+                                        console.log(43.3)
+                                        endContainer = endContainer.nextNode.firstChild;
+                                    } else {
+                                        console.log(43.4)
+                                        endContainer = endContainer.nextNode;
+                                    }
+                                    break;
+
+                                default:
+
+                                    //if (!endContainer.parentElement.contains(startContainer)) {
+                                    if (endContainer.parentElement === startContainer.parentElement) {
+                                        console.log(43.91)
+                                        endContainer.parentElement.remove()
+                                    } else {
+                                        console.log(43.92)
+                                        endContainer.remove()
+                                    }
+                            }
+                        }
+                    } else {
+                        console.log(50)
+                    }
+
+                    break;
+
+                case areElementNode(startContainer, endContainer):
+                    console.log(30.92, 'never');
                     break
 
                 default:
-                    console.log(30.99);
+                    console.log(30.99, 'never');
             }
         }
         document
             .getSelection()
             .collapse(startContainer, startOffset);
-        startContainer.parentElement.normalize()
-    }
-
-    onDeleteContent1(range) {
-        console.table([range]);
-        return
-        // Start und Ende sind Textknoten
-        if ((range.startContainer.nodeType === range.endContainer.nodeType)
-            && (range.startContainer.nodeType === Node.TEXT_NODE)) {
-
-            if (range.startContainer === range.endContainer) {
-                console.log(3010)
-                // <span.cm><span.w><span.cm>
-                //          --------
-                // oder text|text ergibt leeren <span.w>
-                if (range.startContainer.parentElement.previousElementSibling) {
-                    document
-                        .getSelection()
-                        .collapse(range.startContainer.parentElement.previousElementSibling.firstChild,
-                            range.startContainer.parentElement.previousElementSibling.firstChild.length
-                        );
-                } else {
-                    document
-                        .getSelection()
-                        .collapse(range.startContainer.parentElement.nextElementSibling.firstChild);
-                }
-                range.startContainer.parentElement.remove();
-            } else {
-                console.log(3020)
-
-            }
-
-            return;
-        }
-
-        // Start und Ende sind Elementknoten
-        if ((range.startContainer.nodeType === range.endContainer.nodeType)
-            && (range.startContainer.nodeType === Node.ELEMENT_NODE)) {
-
-            // Start und Ende sind derselbe Knoten
-            if (range.startContainer === range.endContainer) {
-                console.log(3030)
-
-                switch (range.startContainer.className) {
-                    case 'ep':
-                        // wenn Vorgänger, dann <span>
-                        if (range.startContainer.previousElementSibling) {
-                            document
-                                .getSelection()
-                                .collapse(range.startContainer.previousElementSibling,
-                                    range.startContainer.previousElementSibling.firstChild.length
-                                );
-                        } else {
-                            document
-                                .getSelection()
-                                .collapse(range.startContainer, 0);
-                        }
-                        return;
-
-                    default:
-                        console.log(3031, range.startContainer.className)
-
-                }
-
-            } else {    // Start und Ende sind verschiedene Knoten
-                console.log(3040, range.startContainer, range.endContainer)
-
-                // startContainer ist leer
-                if (range.startContainer.firstChild?.length === 0) {
-                    console.log(3041)
-
-                    if (range.startContainer.previousElementSibling?.className == 'w'
-                        && range.startContainer.nextElementSibling?.className == 'w') {
-                        console.log(3042)
-
-                        mergeContainer(
-                            range.startContainer.previousElementSibling,
-                            range.startContainer.nextElementSibling);
-                    }
-
-                    range.startContainer.remove();
-                }
-
-                // endContainer ist leer
-                if (range.endContainer.firstChild?.length === 0) {
-                    console.log(3045)
-
-                    if (range.endContainer.previousElementSibling?.className == 'w'
-                        && range.endContainer.nextElementSibling?.className == 'w') {
-                        console.log(3046)
-
-                        mergeContainer(
-                            range.endContainer.previousElementSibling,
-                            range.endContainer.nextElementSibling);
-                    } else {
-                        console.log(3047)
-                        if (range.startContainer.firstChild?.length) {
-                            // FIREFOX
-                            document
-                                .getSelection()
-                                .collapse(
-                                    range.startContainer.firstChild,
-                                    range.startContainer.firstChild.length)
-                        }
-                    }
-
-                    range.endContainer.remove();
-                }
-
-                if (range.startContainer.firstChild?.length) {
-                    // FIREFOX
-                    console.log(3048)
-                    document
-                        .getSelection()
-                        .collapse(
-                            range.startContainer.firstChild,
-                            range.startContainer.firstChild.length)
-                }
-            }
-
-            return;
-        }
-
-        console.log(3050)
+        //startContainer.parentElement.normalize()
     }
 
     handleEvent(event) {
@@ -881,110 +745,6 @@ class TypeWriter {
             case 'deleteContentForward':
                 return this.onDeleteContent(targetrange);
 
-            default:
-                console.log(event.inputType);
-        }
-        return
-
-        console.dir(range, section)
-
-        const [startNode, startOffset, endNode, endOffset] = function (start, offset1, end, offset2) {
-
-            if (start === end) {
-                if (start.nodeType === Node.TEXT_NODE) {
-                    start = start.parentElement;
-
-                    while (start.style.length) {
-                        start = start.parentElement;
-                    }
-
-                    end = start;
-                }
-
-                if (start === event.target || ['ARTICLE', 'P'].includes(start.nodeName)) {
-                    start = end = evaluateXPath(start, '(.//span)[1]');
-                }
-
-                if (start.className == 'ep' && start.previousElementSibling) {
-                    start = end = start.previousElementSibling;
-                }
-
-                if (start.className == 'br' && start.previousElementSibling) {
-                    start = end = start.previousElementSibling;
-                }
-
-                if (['sp', 'cm'].includes(start.className)) {
-                    if (offset1 === 0 && offset2 === 0 && start.previousElementSibling) {
-                        start = end = start.previousElementSibling;
-                        offset1 = offset2 = start.innerText.length
-                    }
-                }
-            } else {
-
-            }
-
-            return [start, offset1, end, offset2]
-        }(range.startContainer, range.startOffset, range.endContainer, range.endOffset)
-
-        console.debug('from range:\n', {
-            startNode: startNode,
-            startOffset: startOffset,
-            endNode: endNode,
-            endOffset: endOffset,
-            equal: startNode === endNode
-        })
-
-        return
-
-        if (startNode !== endNode) {
-            console.log(startNode, endNode)
-            //console.log(startText.parentElement, endText.parentElement)
-
-            const startBlock = startNode.closest('p, h1');
-            const endBlock = endNode.closest('p, h1');
-
-            if (startNode.contains(endNode)) {
-                console.info('TODO: startNode.contains(endNode)')
-            } else {
-                console.log(startNode, endNode)
-                if (startBlock === endBlock) {
-                    let next = startNode.nextElementSibling;
-
-                    while (next && next !== endNode) {
-                        next = next.nextElementSibling;
-                        next?.previousElementSibling.remove();
-                    }
-                } else {
-                    let nextBlock = startBlock.nextElementSibling;
-
-                    while (nextBlock && nextBlock !== endBlock) {
-                        const current = nextBlock;
-                        nextBlock = nextBlock.nextElementSibling;
-                        current.remove();
-                    }
-
-                    let nextNode = startNode.nextElementSibling;
-
-                    while (nextNode && nextNode.className !== 'br') {
-                        const current = nextNode;
-                        nextNode = nextNode.nextElementSibling;
-                        current.remove();
-                    }
-
-                    let prevNode = endNode.previousElementSibling;
-
-                    while (prevNode) {
-                        const current = prevNode;
-                        prevNode = prevNode.previousElementSibling;
-                        current.remove();
-                    }
-                }
-            }
-        }
-
-        switch (event.inputType) {
-            case 'insertText':
-                return this.onInsertContent(startNode, endNode, startOffset, endOffset, event.data);
             default:
                 console.log(event.inputType);
         }
