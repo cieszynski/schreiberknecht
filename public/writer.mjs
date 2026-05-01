@@ -102,7 +102,7 @@ const areTextNode = (...nodes) => nodes.every(
 
 const areStyleNode = (...nodes) => nodes.every(
     (node, idx, arr) => (
-        node.hasAttribute('style')
+        areElementNode(node) && node.hasAttribute('style')
     )
 );
 
@@ -129,25 +129,6 @@ function parse(string) {
     })
 
     return nodes;
-}
-
-
-const mergeContainer = (target, source) => {
-
-    const offset = target.firstChild.length;
-
-    while (source.firstChild) {
-        target.appendChild(source.firstChild);
-    }
-
-    target.normalize();
-    source.remove();
-
-    console.log(offset, target.firstChild.length)
-    document
-        .getSelection()
-        .collapse(target.firstChild, offset);
-
 }
 
 // Range, der die Informationen für den Gebrauch bereitstellt
@@ -390,6 +371,81 @@ class TargetRange extends AlignedRange {
     }
 }
 
+const aligneContainer = (textnode, offset) => {
+    console.assert(areTextNode(textnode));
+
+    if (!textnode.isConnected) {
+        return {
+            container: null,
+            delta: 0
+        }
+    }
+
+    let container = textnode, delta = offset;
+
+    if (textnode.data) {
+        console.log(99.1)
+
+    } else {
+
+        const node = areStyleNode(textnode.parentElement)
+            ? textnode.parentElement
+            : textnode;
+
+        switch (true) {
+
+            case (!!node.previousSibling && areStyleNode(node.previousSibling)):
+                console.log(99.21)
+                container = node.previousSibling.firstChild;
+                delta = container.length;
+                break;
+
+            case (!!node.previousSibling):
+                console.log(99.22)
+                container = node.previousSibling;
+                delta = container.length;
+                break;
+
+            case (!!node.nextSibling && areStyleNode(node.nextSibling)):
+                console.log(99.23)
+                container = node.nextSibling.firstChild;
+                delta = 0;
+                break;
+
+            case (!!node.nextSibling):
+                console.log(99.24)
+                container = node.nextSibling;
+                delta = 0;
+                break;
+
+            case (node.parentElement.childNodes.length > 1):
+                console.log(99.25, 'never')
+                break;
+
+            case (node.parentElement.childNodes.length === 1):
+
+                if (node.parentElement.previousElementSibling) {
+                    console.log(99.261, 'never')
+                    container = node.parentElement.previousElementSibling.lastChild;
+                    delta = container.length;
+                } else { // <span.ep>
+                    console.log(99.262)
+                    container = node.parentElement.nextElementSibling;
+                    delta = 0;
+                }
+                node.parentElement.remove()
+                break;
+
+            default:
+                console.log(99.29, 'never')
+        }
+
+        node.remove()
+    }
+
+    return { container, delta }
+}
+
 class TypeWriter {
 
     constructor(node) {
@@ -416,307 +472,27 @@ class TypeWriter {
             endContainer = range.endContainer,
             endOffset = range.endOffset;
 
-        if (startContainer === endContainer) {
+        if (areTextNode(startContainer, endContainer)) {
+            const
+                start = aligneContainer(startContainer, startOffset),
+                end = aligneContainer(endContainer, endOffset);
 
-            if (areTextNode(startContainer)) {
-
-                if (startContainer.length) {
-                    console.log(30.1, 'OK')
-
-                } else {
-                    console.log(30.2)
-
-                    if (areStyleNode(startContainer.parentElement)) {
-
-                        const parent = startContainer.parentElement;
-
-                        switch (true) {
-
-                            case (!!parent.previousSibling):
-                                if (areTextNode(parent.previousSibling)) {
-                                    console.log(30.21);
-                                    startContainer = parent.previousSibling;
-
-                                } else {
-                                    console.log(30.22);
-                                    startContainer = parent.previousSibling.firstChild;
-                                }
-                                break;
-
-                            case (!!parent.nextSibling):
-                                if (areTextNode(parent.nextSibling)) {
-                                    console.log(30.23, parent.nextSibling);
-                                    startContainer = parent.nextSibling;
-
-                                } else {
-                                    console.log(30.24);
-                                    startContainer = parent.nextSibling.firstChild;
-                                }
-                                break;
-
-                            default:
-                                console.log(30.29);
-                                // ein <span style> ohne Vor- und Nachfahren ist alleine im <span>
-                                // Dieser <span> kann dann auch weg
-                                parent.parentNode.remove();
-                                return;
-                        }
-
-                        parent.remove();
-                        startOffset = startContainer.length;
-                        startContainer.parentElement.normalize();
-
-                    } else { // kein <span style>
-
-                        switch (true) {
-                            case (!!startContainer.previousSibling):
-
-                                if (areTextNode(startContainer.previousSibling)) {
-                                    console.log(30.31, 'never')
-                                    startContainer = startContainer.previousSibling
-                                } else { // Kann nur <span style> sein
-                                    console.log(30.32)
-                                    startContainer = startContainer.previousSibling.firstChild;
-                                }
-
-                                startOffset = startContainer.length;
-                                range.startContainer.remove();
-
-                                break;
-
-                            case (!!startContainer.nextSibling):
-
-                                if (areTextNode(startContainer.nextSibling)) {
-                                    console.log(30.41)
-                                    startContainer = startContainer.nextSibling;
-                                } else {
-                                    console.log(30.42)
-                                    startContainer = startContainer.nextSibling.firstChild;
-                                }
-
-                                startOffset = 0;
-                                range.startContainer.remove();
-
-                                break;
-
-                            default:
-                                console.log(30.9)
-                                // ein leerer startContainer ohne Vor- und Nachfahren
-                                // ist in einem leeren <span>; dieser kann weg
-                                startContainer.parentElement.remove();
-                        }
-
-                    }
-                }
-            } else { // ELEMENT_NODE
-                console.log(30.8)
-
+            if (start.container?.isConnected) {
+                console.log(1.1)
+                document
+                    .getSelection()
+                    .collapse(start.container, start.delta);
+                start.container.parentElement.normalize();
+            } else {
+                console.log(1.2, end)
+                document
+                    .getSelection()
+                    .collapse(end.container, end.delta);
+                end.container.parentElement.normalize();
             }
-            // END if (startContainer === endContainer)
         } else {
-
-            switch (true) {
-                case areTextNode(startContainer, endContainer):
-
-                    if (isWord(startContainer) && isWord(endContainer)) {
-                        console.log(29.2)
-
-                        if (!startContainer.parentElement.contains(endContainer)) {
-
-                            switch (true) {
-                                case areStyleNode(startContainer.parentElement, endContainer.parentElement):
-                                    console.log(30.9111, 'OK')
-                                    break;
-
-                                case areStyleNode(startContainer.parentElement):
-                                    console.log(30.9112, 'OK')
-                                    break;
-
-                                case areStyleNode(endContainer.parentElement):
-                                    console.log(30.9113, 'never')
-                                    break;
-
-                                default:
-                                    console.log(30.9119)
-                                    startContainer.after(endContainer.cloneNode());
-                                    endContainer.parentElement.remove();
-                            }
-                        }
-
-                        break;
-                    }
-
-                    if (!startContainer.length) {
-
-                        if (areStyleNode(startContainer.parentElement)) {
-
-                            const parent = startContainer.parentElement;
-
-                            switch (true) {
-                                case (!!parent.previousNode):
-                                    if (areStyleNode(parent.previousNode)) {
-                                        console.log(40.1);
-
-                                    } else {
-                                        console.log(40.2);
-
-                                    }
-                                    break;
-
-                                case (!!parent.nextNode):
-                                    if (areStyleNode(parent.nextNode)) {
-                                        console.log(40.3);
-
-                                    } else {
-                                        console.log(40.4);
-
-                                    }
-                                    break;
-
-                                default:
-                                    console.log(40.9)
-                                    // ein <span style> ohne Vor- und Nachfahren ist alleine im <span>
-                                    // Dieser <span> kann dann auch weg
-                                    if (!parent.parentElement.contains(endContainer)) {
-                                        console.log(40.91)
-                                        parent.parentElement.remove()
-                                    } else {
-                                        console.log(40.92)
-                                        parent.remove()
-                                    }
-                            }
-                        } else {
-
-                            switch (true) {
-                                case (!!startContainer.previousNode):
-
-                                    if (areStyleNode(startContainer.previousNode)) {
-                                        console.log(41.1);
-                                        startContainer = startContainer.previousNode.firstChild;
-                                    } else {
-                                        console.log(41.2);
-                                        startContainer = startContainer.previousNode;
-                                    }
-                                    break;
-
-                                case (!!startContainer.nextNode):
-
-                                    if (areStyleNode(startContainer.nextNode)) {
-                                        console.log(41.3)
-                                        startContainer = startContainer.nextNode.firstChild;
-                                    } else {
-                                        console.log(41.4)
-                                        startContainer = startContainer.nextNode;
-                                    }
-                                    break;
-
-                                default:
-
-                                    if (!startContainer.parentElement.contains(endContainer)) {
-                                        console.log(41.91)
-                                        startContainer.parentElement.remove()
-                                    } else {
-                                        console.log(41.92)
-                                        startContainer.remove()
-                                    }
-                            }
-                        }
-                    }
-
-                    console.log(50.1, endContainer.length);
-                    if (!endContainer.length) {
-
-                        if (areStyleNode(endContainer.parentElement)) {
-
-                            const parent = endContainer.parentElement;
-
-                            switch (true) {
-                                case (!!parent.previousNode):
-                                    if (areStyleNode(parent.previousNode)) {
-                                        console.log(42.1);
-
-                                    } else {
-                                        console.log(42.2);
-
-                                    }
-                                    break;
-
-                                case (!!parent.nextNode):
-                                    if (areStyleNode(parent.nextNode)) {
-                                        console.log(42.3);
-
-                                    } else {
-                                        console.log(42.4);
-
-                                    }
-                                    break;
-
-                                default:
-                                    // ein <span style> ohne Vor- und Nachfahren ist alleine im <span>
-                                    // Dieser <span> kann dann auch weg
-                                    console.log(42.91)
-                                    const grandpa = parent.parentElement;
-                                    parent.remove();
-
-                                    if (!grandpa.childNodes.length) {
-                                        console.log(42.92)
-                                        grandpa.remove()
-                                    } else console.log(42.92, grandpa.childNodes);
-                            }
-                        } else {
-                            switch (true) {
-                                case (!!endContainer.previousNode):
-
-                                    if (areStyleNode(endContainer.previousNode)) {
-                                        console.log(43.1);
-                                        endContainer = endContainer.previousNode.firstChild;
-                                    } else {
-                                        console.log(43.2);
-                                        endContainer = endContainer.previousNode;
-                                    }
-                                    break;
-
-                                case (!!endContainer.nextNode):
-
-                                    if (areStyleNode(endContainer.nextNode)) {
-                                        console.log(43.3)
-                                        endContainer = endContainer.nextNode.firstChild;
-                                    } else {
-                                        console.log(43.4)
-                                        endContainer = endContainer.nextNode;
-                                    }
-                                    break;
-
-                                default:
-
-                                    //if (!endContainer.parentElement.contains(startContainer)) {
-                                    if (endContainer.parentElement === startContainer.parentElement) {
-                                        console.log(43.91)
-                                        endContainer.parentElement.remove()
-                                    } else {
-                                        console.log(43.92)
-                                        endContainer.remove()
-                                    }
-                            }
-                        }
-                    } else {
-                        console.log(50)
-                    }
-
-                    break;
-
-                case areElementNode(startContainer, endContainer):
-                    console.log(30.92, 'never');
-                    break
-
-                default:
-                    console.log(30.99, 'never');
-            }
+            console.log(1.9, '<span.ep>')
         }
-        document
-            .getSelection()
-            .collapse(startContainer, startOffset);
-        //startContainer.parentElement.normalize()
     }
 
     handleEvent(event) {
