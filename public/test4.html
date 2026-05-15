@@ -49,13 +49,16 @@
         }
 
         span.ep {
-            background-color: yellow;
+            background-color: lightgray;
+            display: inline-block;
             /* display: none; */
-            width: 0em;
+            width: 1em;
         }
 
         span.br {
-            background-color: green;
+            user-select: none;
+            background-color:lightgray;
+            white-space: pre-line;
             display: inline-block;
             width: 1em;
         }
@@ -63,30 +66,36 @@
 </head>
 
 <body>
-    <div><article><p><span class="ep"><br></span></p></article></div>
+    <div><article><p><span class="br">&#10;</span></p></article></div>
     <hr>
-    <div><article><p><span class="w">aaa</span><span class="ep"><br></span></p></article></div>
+    <div><article><p><span class="br">&#10;</span></p><p><span class="br">&#10;</span></p></article></div>
     <hr>
-    <div><article><p><span class="w">aaa<span style="color: blue">blue</span></span><span class="ep"><br></span></p></article></div>
+    <div><article><p><span class="w">aaa</span><span class="br">&#10;</span></p></article></div>
     <hr>
-    <div><article><p><span class="w"><span style="color: red">red</span><span style="color: blue">blue</span>AA<span style="color: green">green</span>BB</span><span class="ep"><br></p></article></div>
+    <div><article><p><span class="w">aaa</span><span class="br">&#10;</span></p><p><span class="w">aaa</span><span class="br">&#10;</span></p></article></div>
     <hr>
-    <div><article><p><span class="w">aa<span style="color: red">red</span><span style="color: blue">blue</span>AA<span style="color: green">green</span>BB</span><span class="ep"><br></p></article></div>
+    <div><article><p><span class="w">aaa<span style="color: blue">blue</span></span><span class="br">&#10;</span></p></article></div>
     <hr>
-    <div><article><p><span class="w">aaa</span><span class="sp"> </span><span class="w">bbb</span><span class="ep"><br></span></p></article></div>
+    <div><article><p><span class="w">aaa<span style="color: blue">blue</span></span><span class="cm">,</span><span class="w"><span style="color: red">red</span></span><span class="br">&#10;</span></p></article></div>
     <hr>
-    <div><article><p><span class="cm">,</span><span class="w">aaa</span><span class="cm">,</span><span class="w">bbb</span><span class="ep"><br></span></p></article></div>
+    <div><article><p><span class="w"><span style="color: red">red</span><span style="color: blue">blue</span>AA<span style="color: green">green</span>BB</span><span class="br">&#10;</span></p></article></div>
     <hr>
-    <div><article><p><span class="cm">,</span><span class="w">aaa</span><span class="cm">,</span><span class="w">bbb</span><span class="ep"><br></span></p><p><span class="cm">,</span><span class="w">aaa</span><span class="cm">,</span><span class="w">bbb</span><span class="ep"><br></span></p></article></div>
+    <div><article><p><span class="w">aa<span style="color: red">red</span><span style="color: blue">blue</span>AA<span style="color: green">green</span>BB</span><span class="br">&#10;</span></p></article></div>
+    <hr>
+    <div><article><p><span class="w">aaa</span><span class="sp"> </span><span class="w">bbb</span><span class="br">&#10;</span></p></article></div>
+    <hr>
+    <div><article><p><span class="cm">,</span><span class="w">aaa</span><span class="cm">,</span><span class="w">bbb</span><span class="br">&#10;</span></p></article></div>
+    <hr>
+    <div><article><p><span class="cm">,</span><span class="w">aaa</span><span class="cm">,</span><span class="w">bbb</span><span class="br">&#10;</span></p><p><span class="cm">,</span><span class="w">aaa</span><span class="cm">,</span><span class="w">bbb</span><span class="br">&#10;</span></p></article></div>
     
-    <div><article><p><span class="cm">,</span><span class="w">aaa</span><span class="cm">,</span><span class="w">AAA</span><span class="ep"><br></span></p><p><span class="cm">,</span><span class="w">bbb</span><span class="cm">,</span><span class="w">BBB</span><span class="ep"><br></span></p><p><span class="cm">,</span><span class="w">ccc</span><span class="cm">,</span><span class="w">CCC</span><span class="ep"><br></span></p></article></div>
+    <div><article><p><span class="cm">,</span><span class="w">aaa</span><span class="cm">,</span><span class="w">AAA</span><span class="br">&#10;</span></p><p><span class="cm">,</span><span class="w">bbb</span><span class="cm">,</span><span class="w">BBB</span><span class="br">&#10;</span></p><p><span class="cm">,</span><span class="w">ccc</span><span class="cm">,</span><span class="w">CCC</span><span class="br">&#10;</span></p></article></div>
     
     
     <script type="module">
-        import { Writer } from './writer.mjs';
+        import { Writer, TypeWriter } from './writer.mjs';
 
         document.querySelectorAll('div').forEach(element => {
-            const writer = new Writer(element)
+            const writer = new TypeWriter(element)
         });
     </script>
 </body>

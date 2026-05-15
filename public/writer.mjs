@@ -1,64 +1,5 @@
 
 
-const evaluateXPath = (node, xpath) => document.evaluate(
-    xpath,
-    node,
-    null,
-    9,
-    null
-).singleNodeValue;
-
-const createSpan = (text) => {
-    const elem = document.createElement('span');
-    elem.append(new Text(text));
-    //elem.innerText = text;
-
-    switch (text) {
-        case ' ':
-            elem.className = 'sp';
-            break;
-        case ',':
-            elem.className = 'cm';
-            break;
-        default:
-            elem.className = 'w';
-    }
-    return elem;
-}
-
-const createSpanBr = (name = 'br') => {
-    const elem = document.createElement('span');
-    elem.append(document.createElement('br'));
-    elem.className = 'br';
-    return elem;
-}
-
-const joinNodes = (node1, node2) => {
-    // TODO
-    node1.innerText += node2.innerText;
-    node2.remove();
-}
-
-const splitNode = (node, pre, post, data) => {
-    const sp = createSpan(data);
-
-    if (pre) {
-        node.innerText = pre;
-        node.after(sp);
-    } else {
-        node.replaceWith(sp);
-    }
-
-    if (post) {
-        const span = createSpan(post);
-        sp.after(span);
-    }
-
-    document
-        .getSelection()
-        .collapse(sp.firstChild, 1);
-}
-
 // https://en.wikipedia.org/wiki/Punctuation
 const findClassName = (punctuation) => {
     const marks = {
@@ -83,14 +24,14 @@ const isWord = (str) => (!!str.length && regex.test(str));
 // has every <element> the same nodeName
 const areBlockElement = (...nodes) => nodes.every(
     (node, idx, arr) => (
-        ['P'].includes(node.nodeName)
+        ['ARTICLE', 'DIV', 'P'].includes(node.nodeName)
         && arr[0].nodeName === node.nodeName
     )
 );
 
 const areElementNode = (...nodes) => nodes.every(
     (node, idx, arr) => (
-        node.nodeType === Node.ELEMENT_NODE
+        node?.nodeType === Node.ELEMENT_NODE
     )
 );
 
@@ -105,6 +46,36 @@ const areStyleNode = (...nodes) => nodes.every(
         areElementNode(node) && node.hasAttribute('style')
     )
 );
+
+const areSpanNode = (...nodes) => nodes.every(
+    (node, idx, arr) => (
+        areElementNode(node) && node.nodeName === 'SPAN'
+    )
+);
+
+const areEpNode = (...nodes) => nodes.every(
+    (node, idx, arr) => (
+        areElementNode(node) && 'ep' == node.className
+    )
+);
+
+const areWordNode = (...nodes) => nodes.every(
+    (node, idx, arr) => (
+        areElementNode(node) && 'w' == node.className
+    )
+);
+
+const areEmpty = (...nodes) => nodes.every(
+    (node, idx, arr) => (
+        (areElementNode(node) && !node.innerHTML) ||
+        (areTextNode(node) && node.length === 0)
+    )
+);
+
+const containStyleNodes = (...nodes) => nodes.every(
+    (node, idx, arr) => Array.from(node.childNodes)
+        .some((child) => areStyleNode(child))
+)
 
 function parse(string) {
 
@@ -131,30 +102,77 @@ function parse(string) {
     return nodes;
 }
 
-// Range, der die Informationen für den Gebrauch bereitstellt
-class AlignedRange extends StaticRange {
+
+// Range, der die FF-Fehler korrigiert
+class TargetRange1 extends StaticRange {
 
     constructor(range) {
-        console.log('AlignedRange')
+        console.log('TargetRange')
         console.table([range])
 
-        if ((range.startContainer === range.endContainer)
-            && ('ep' === range.startContainer.className)) {
-            console.log(100.1, 'OK');
+        let startContainer = range.startContainer,
+            startOffset = range.startOffset,
+            endContainer = range.endContainer,
+            endOffset = range.endOffset;
 
-            super(range);
+        if (areElementNode(startContainer)) {
 
-        } else {
-            console.log(100.2);
-            console.assert(range.startContainer.nodeType === Node.TEXT_NODE);
-            console.assert(range.endContainer.nodeType === Node.TEXT_NODE);
+            while (!areSpanNode(startContainer)) {
+                console.log(1, startContainer)
+                startContainer = startContainer.firstElementChild;
+            }
 
-            let startContainer = range.startContainer,
-                startOffset = range.startOffset,
-                endContainer = range.endContainer,
-                endOffset = range.endOffset,
-                start = startContainer.parentElement;
+            if (areEpNode(startContainer) && startContainer.previousElementSibling) {
+                console.log(2, startContainer)
+                startContainer = startContainer.previousElementSibling
+            }
 
+            if (!areEpNode(startContainer)) {
+
+                if (!areStyleNode(startContainer.firstChild)) {
+                    if (containStyleNodes(startContainer)) {
+                        startContainer = startContainer.childNodes[startOffset].firstChild
+                    } else {
+                        startContainer = startContainer.firstChild;
+                    }
+                } else {
+                    startContainer = startContainer.firstChild.firstChild;
+                }
+
+            }
+
+            startOffset = 0;
+        }
+
+
+        if (areElementNode(endContainer)) {
+
+            while (!areSpanNode(endContainer)) {
+                endContainer = endContainer.lastElementChild;
+            }
+
+            if (areEpNode(endContainer) && endContainer.previousElementSibling) {
+                endContainer = endContainer.previousElementSibling
+            }
+
+            if (!areEpNode(endContainer)) {
+
+                if (!areStyleNode(endContainer.lastChild)) {
+                    endContainer = endContainer.lastChild;
+                } else {
+                    endContainer = endContainer.lastChild.firstChild;
+                }
+
+                endOffset = endContainer.length;
+
+            } else {
+                endOffset = 0;
+            }
+        }
+
+        if (!areEpNode(startContainer, endContainer)) {
+
+            let start = startContainer.parentElement;
 
             while (!start.contains(endContainer)) {
                 start = start.parentElement;
@@ -167,6 +185,7 @@ class AlignedRange extends StaticRange {
             while ((currentNode = iterator.nextNode())) {
 
                 if (removing && (!currentNode.contains(endContainer))) {
+                    console.log(100.20);
                     currentNode.remove();
                 }
 
@@ -178,12 +197,13 @@ class AlignedRange extends StaticRange {
                 }
 
                 if (currentNode === startContainer) {
+                    console.log(100.22);
                     startContainer.deleteData(startOffset, startContainer.length - startOffset);
                     removing = true;
                 }
 
                 if (currentNode === endContainer) {
-                    console.log(100.22);
+                    console.log(100.23);
                     endContainer.deleteData(0, endOffset)
                     break;
                 }
@@ -197,7 +217,7 @@ class AlignedRange extends StaticRange {
 
                 if (currentNode.previousSibling
                     && areBlockElement(currentNode.previousSibling, currentNode)) {
-                    console.log(100.23);
+                    console.log(100.24);
 
                     currentNode.previousSibling
                         .append(...currentNode.childNodes);
@@ -206,247 +226,18 @@ class AlignedRange extends StaticRange {
                     break;
                 }
             }
-
-            super({
-                startContainer: startContainer,
-                startOffset: startOffset,
-                endContainer: endContainer,
-                endOffset: endOffset
-            });
-
         }
-    }
-}
-
-// Range, der die FF-Fehler korrigiert
-class TargetRange extends AlignedRange {
-
-    constructor(range) {
-        console.log('TargetRange')
-        let startContainer = range.startContainer,
-            startOffset = range.startOffset,
-            endContainer = range.endContainer,
-            endOffset = range.endOffset;
-
-        if (startContainer.nodeType === Node.TEXT_NODE) {
-
-            // FF nimmt den Vorgänger-Knoten und setzt Offset auf seine Textlänge
-            if ((startOffset === startContainer.length) && (startContainer !== endContainer)) {
-
-                switch (true) {
-                    case (!!startContainer.nextSibling?.data):
-                        console.log(0.1, 'never?')
-                        break;
-
-                    case (!!startContainer.nextSibling?.firstChild?.data):
-                        console.log(0.2)
-                        startContainer = startContainer.nextSibling.firstChild;
-                        startOffset = 0;
-                        break;
-
-                    case (!!startContainer.parentElement.nextSibling?.data):
-                        console.log(0.3)
-                        startContainer = startContainer.parentElement.nextSibling;
-                        startOffset = 0;
-                        break;
-
-                    case (!!startContainer.parentElement.nextSibling?.firstChild?.data):
-                        console.log(0.4)
-                        startContainer = startContainer.parentElement.nextSibling.firstChild;
-                        startOffset = 0;
-                        break;
-
-                    default:
-                        console.log(0.5, 'unknown')
-                }
-
-            } else {
-                console.log(0, 'ok')
-            }
-        } else {
-
-            if ('ep' === startContainer.className) {
-                console.log(1.1)
-                if (startContainer.previousElementSibling?.lastChild) {
-                    console.log(1.2)
-                    startContainer = startContainer.previousElementSibling.lastChild;
-                    startOffset = startContainer.length;
-                }
-
-            } else {
-                console.log(1.3)
-
-                let node = startContainer.firstElementChild;
-
-                while (node && node.localName !== 'span') {
-                    node = node.firstElementChild;
-                }
-
-                // <span.ep>?
-                startContainer = node.firstChild
-                    ? node.firstChild
-                    : node;
-                startOffset = 0;
-            }
-        }
-
-        if (endContainer.nodeType === Node.TEXT_NODE) {
-
-            if ((endOffset === 0) && (startContainer !== endContainer)) {
-
-                switch (true) {
-                    case (!!endContainer.previousSibling?.data):
-                        console.debug(3.1, 'never')
-                        break;
-
-                    case (!!endContainer.previousSibling?.firstChild.data):
-                        console.debug(3.2)
-                        endContainer = endContainer.previousSibling.firstChild;
-                        endOffset = endContainer.length;
-                        break;
-
-                    case (!!endContainer.parentElement.previousSibling?.data):
-                        console.debug(3.3)
-                        endContainer = endContainer.parentElement.previousSibling;
-                        endOffset = endContainer.length;
-                        break;
-
-                    case (!!endContainer.parentElement.previousSibling?.firstChild.data):
-                        console.debug(3.4)
-                        endContainer = endContainer.parentElement.previousSibling.firstChild;
-                        endOffset = endContainer.length;
-                        break;
-
-                    default:
-                        console.log(3.5, 'unknown')
-                }
-            } else {
-                console.log(4, 'OK')
-            }
-
-        } else {
-
-            let node = ('ep' !== endContainer.className)
-                ? endContainer.lastElementChild
-                : endContainer;
-
-            while (node && node.localName !== 'span') {
-                node = node.lastElementChild;
-            }
-
-            endContainer = node;
-
-            console.assert('ep' == endContainer.className, 'not: <span.ep>');
-
-            switch (true) {
-                case (!!endContainer.previousElementSibling?.lastChild?.firstChild?.data):
-                    console.log(5.1)
-                    endContainer = endContainer.previousElementSibling.lastChild.firstChild;
-                    endOffset = endContainer.length;
-                    break
-
-                case (!!endContainer.previousElementSibling?.lastChild?.data):
-                    console.log(5.2)
-                    endContainer = endContainer.previousElementSibling.lastChild;
-                    endOffset = endContainer.length;
-                    break
-
-                default:
-                    console.log(5.3, 'OK')
-            }
-        }
-
-        console.assert(startContainer.nodeType === Node.TEXT_NODE
-            || startContainer.className === 'ep');
-        console.assert(endContainer.nodeType === Node.TEXT_NODE
-            || endContainer.className === 'ep');
 
         super({
             startContainer: startContainer,
             startOffset: startOffset,
             endContainer: endContainer,
-            endOffset: endOffset,
-            collapsed: range.collapsed
+            endOffset: endOffset
         });
     }
 }
 
-const aligneContainer = (textnode, offset) => {
-    console.assert(areTextNode(textnode));
-
-    if (!textnode.isConnected) {
-        return {
-            container: null,
-            delta: 0
-        }
-    }
-
-    let container = textnode, delta = offset;
-
-    if (textnode.data) {
-        console.log(99.1)
-
-    } else {
-
-        const node = areStyleNode(textnode.parentElement)
-            ? textnode.parentElement
-            : textnode;
-
-        switch (true) {
-
-            case (!!node.previousSibling && areStyleNode(node.previousSibling)):
-                console.log(99.21)
-                container = node.previousSibling.firstChild;
-                delta = container.length;
-                break;
-
-            case (!!node.previousSibling):
-                console.log(99.22)
-                container = node.previousSibling;
-                delta = container.length;
-                break;
-
-            case (!!node.nextSibling && areStyleNode(node.nextSibling)):
-                console.log(99.23)
-                container = node.nextSibling.firstChild;
-                delta = 0;
-                break;
-
-            case (!!node.nextSibling):
-                console.log(99.24)
-                container = node.nextSibling;
-                delta = 0;
-                break;
-
-            case (node.parentElement.childNodes.length > 1):
-                console.log(99.25, 'never')
-                break;
-
-            case (node.parentElement.childNodes.length === 1):
-
-                if (node.parentElement.previousElementSibling) {
-                    console.log(99.261, 'never')
-                    container = node.parentElement.previousElementSibling.lastChild;
-                    delta = container.length;
-                } else { // <span.ep>
-                    console.log(99.262)
-                    container = node.parentElement.nextElementSibling;
-                    delta = 0;
-                }
-                node.parentElement.remove()
-                break;
-
-            default:
-                console.log(99.29, 'never')
-        }
-
-        node.remove()
-    }
-
-    return { container, delta }
-}
-
-class TypeWriter {
+class TypeWriter1 {
 
     constructor(node) {
 
@@ -467,31 +258,74 @@ class TypeWriter {
         console.log('onDeleteContent');
         console.table([range]);
 
-        let startContainer = range.startContainer,
-            startOffset = range.startOffset,
-            endContainer = range.endContainer,
-            endOffset = range.endOffset;
+        switch (true) {
 
-        if (areTextNode(startContainer, endContainer)) {
-            const
-                start = aligneContainer(startContainer, startOffset),
-                end = aligneContainer(endContainer, endOffset);
+            case (areEpNode(range.startContainer, range.endContainer)):
+                console.log(1000.1, 'areEpNode')
+                break;
 
-            if (start.container?.isConnected) {
-                console.log(1.1)
-                document
-                    .getSelection()
-                    .collapse(start.container, start.delta);
-                start.container.parentElement.normalize();
-            } else {
-                console.log(1.2, end)
-                document
-                    .getSelection()
-                    .collapse(end.container, end.delta);
-                end.container.parentElement.normalize();
-            }
-        } else {
-            console.log(1.9, '<span.ep>')
+            case (areTextNode(range.startContainer, range.endContainer)):
+                console.log(1000.2, 'areTextNode')
+
+                let start = range.startContainer.parentElement;
+
+                while (areStyleNode(start) || !start.contains(range.endContainer)) {
+                    start = start.parentElement;
+                }
+
+                const iterator = document.createNodeIterator(start);
+
+                let currentNode, offsetNode = range.startContainer;
+
+                while ((currentNode = iterator.nextNode())) {
+                    console.log(1000.21)
+                    //offsetNode = currentNode;
+
+                    if (!areEpNode(currentNode) && areEmpty(currentNode)) {
+                        console.log(1000.211)
+                        currentNode.remove();
+                        //offsetNode = iterator.previousNode()
+                    }
+
+                    if (!areEpNode(currentNode) && areWordNode(currentNode, currentNode.previousElementSibling)) {
+                        console.log(1000.212)
+                        // offsetNode = iterator.previousNode()//offsetNode = currentNode.childNodes[0].firstChild//currentNode.previousElementSibling.lastChild
+                        currentNode.previousElementSibling.append(...currentNode.childNodes);
+                        currentNode.remove();
+                    }
+                }
+
+                start.normalize();
+
+                if (areEmpty(iterator.root)) {
+                    console.log(1000.213)
+                    document
+                        .getSelection()
+                        .collapse(iterator.root.nextSibling);
+                    iterator.root.remove();
+                } else {
+                    console.log(1000.214, offsetNode)
+
+                    if (areEpNode(offsetNode)) {
+                        if (!!offsetNode.previousElementSibling) {
+                            document
+                                .getSelection()
+                                .collapse(offsetNode.previousElementSibling);
+                        } else {
+                            document
+                                .getSelection()
+                                .collapse(offsetNode);
+                        }
+                    } else {
+                        document
+                            .getSelection()
+                            .collapse(offsetNode);
+                    }
+                }
+
+                break;
+            default:
+                console.log(1000.9, 'never')
         }
     }
 
@@ -527,6 +361,105 @@ class TypeWriter {
     }
 }
 
+class TargetRange extends StaticRange {
+
+    constructor(range) {
+        console.table([range])
+
+        let startContainer = range.startContainer,
+            startOffset = range.startOffset,
+            endContainer = range.endContainer,
+            endOffset = range.endOffset,
+            start = range.startContainer,
+            currentNode;
+
+        while (!!!startContainer.data) {
+            startContainer = startContainer.firstChild;
+            startOffset = 0;
+        }
+
+        while (!!!endContainer.data) {
+            endContainer = endContainer.lastChild;
+            endOffset = 0;
+        }
+
+        start = startContainer;
+
+        while (!!start.data || !start.contains(endContainer) || areSpanNode(start)) {
+            start = start.parentElement;
+        }
+
+        const iterator = document.createNodeIterator(start, NodeFilter.SHOW_TEXT),
+            textnodes = [];
+
+        while ((currentNode = iterator.nextNode())) {
+            textnodes.push(currentNode)
+        }
+
+        textnodes.forEach((node, idx, arr) => {
+
+            if (range.collapsed) {
+
+                if (node === startContainer && startOffset == 0 && endOffset == 0) {
+
+                    if (idx) {
+                        startContainer = endContainer = arr[idx - 1];
+                        startOffset = endOffset = startContainer.length;
+                        return;
+                    }
+                }
+
+            } else if (startContainer === endContainer) {
+                console.log(1)
+            } else {
+                console.log(2)
+
+                if (node === startContainer && startOffset === startContainer.length) {
+
+                    if (idx < arr.length - 1) {
+                        startContainer = arr[idx + 1];
+                        startOffset = 0;
+                    }
+                }
+
+                if (node === endContainer && endOffset == 0) {
+
+                    if (idx) {
+                        endContainer = arr[idx - 1];
+                        endOffset = endContainer.length;
+                    }
+                    return;
+                }
+            }
+        });
+
+        super({
+            startContainer: startContainer,
+            endContainer: endContainer,
+            startOffset: startOffset,
+            endOffset: endOffset
+        });
+    }
+}
+
+class TypeWriter {
+
+    constructor(node) {
+        node.addEventListener('beforeinput', this);
+        node.contentEditable = true;
+    }
+
+    handleEvent(event) {
+        console.clear();
+        event.preventDefault();
+        //console.log(event)
+        const [range] = event.getTargetRanges();
+
+        const targetrange = new TargetRange(range);
+        console.table([targetrange])
+    }
+}
+
 class Writer {
 
     constructor(node) {
@@ -537,4 +470,4 @@ class Writer {
     }
 }
 
-export { Writer }
+export { Writer, TypeWriter }
